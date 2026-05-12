@@ -1,0 +1,86 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String   @id @default(uuid()) @db.Uuid
+  githubId   String   @unique @map("github_id")
+  username   String   @map("username")
+  avatarUrl  String   @map("avatar_url")
+  email      String?  @map("email")
+  githubToken String? @map("github_token")
+  selectedModels String[] @default(["llama-3.1", "deepseek-v4-pro", "mistral-medium-3.5"]) @map("selected_models")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  analyses   Analysis[]
+  repositories Repository[]
+
+  @@index([githubId])
+  @@map("users")
+}
+
+model Repository {
+  id            String   @id @default(uuid()) @db.Uuid
+  githubId      String   @unique @map("github_id")
+  userId        String   @db.Uuid @map("user_id")
+  name          String
+  owner         String
+  isActive      Boolean  @default(false) @map("is_active")
+  webhookId     String?  @map("webhook_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  user          User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([githubId])
+  @@map("repositories")
+}
+
+model Analysis {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @db.Uuid @map("user_id")
+  repoName      String   @map("repo_name")
+  prNumber      Int      @map("pr_number")
+  title         String
+  status        String   @default("pending") // pending, in_progress, completed, failed
+  qualityScore  Int?     @map("quality_score")
+  securityScore Int?     @map("security_score")
+  models        String[] // The 3 models used
+  debateLog     Json?    @map("debate_log") // Complete log of AI communication
+  summary       String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  user          User     @relation(fields: [userId], references: [id])
+  findings      Finding[]
+
+  @@index([userId])
+  @@index([repoName, prNumber])
+  @@map("analyses")
+}
+
+model Finding {
+  id          String   @id @default(uuid()) @db.Uuid
+  analysisId  String   @db.Uuid @map("analysis_id")
+  file        String
+  line        Int
+  issue       String
+  type        String   // Critical, Vulnerability, Warning, Info
+  confidence  String   // High, Medium, Low
+  consensus   Boolean  @default(false)
+  rationale   String
+  resolution  String
+  models      String[] // Which models agreed on this finding
+
+  analysis    Analysis @relation(fields: [analysisId], references: [id])
+
+  @@index([analysisId])
+  @@map("findings")
+}
