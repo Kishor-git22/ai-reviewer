@@ -47,6 +47,7 @@ export class AuthService {
         username: githubUser.login,
         avatarUrl: githubUser.avatar_url,
         email: githubUser.email || undefined,
+        githubToken: accessToken,
       }
     )
 

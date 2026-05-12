@@ -7,12 +7,14 @@ interface CreateUserInput {
   username: string
   avatarUrl: string
   email?: string
+  githubToken?: string
 }
 
 interface UpdateUserInput {
   username?: string
   avatarUrl?: string
   email?: string
+  githubToken?: string
 }
 
 @Injectable()
@@ -55,6 +57,7 @@ export class UsersService {
         username: data.username,
         avatarUrl: data.avatarUrl,
         email: data.email,
+        githubToken: data.githubToken,
       })
     }
 

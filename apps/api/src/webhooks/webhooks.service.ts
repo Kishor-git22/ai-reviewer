@@ -1,0 +1,165 @@
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '@/prisma/prisma.service';
+import { ReviewerService } from '@/reviewer/reviewer.service';
+import { Octokit } from 'octokit';
+import { ConfigService } from '@nestjs/config';
+
+@Injectable()
+export class WebhooksService {
+  private readonly logger = new Logger(WebhooksService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly reviewerService: ReviewerService,
+    private readonly configService: ConfigService,
+  ) {}
+
+  /**
+   * Register a webhook on a GitHub repository
+   */
+  async registerWebhook(userId: string, owner: string, repo: string, githubToken: string) {
+    const octokit = new Octokit({ auth: githubToken });
+    const webhookUrl = `${this.configService.get('APP_URL')}/webhooks/github`;
+
+    this.logger.log(`Registering webhook for ${owner}/${repo} at ${webhookUrl}`);
+
+    try {
+      const response = await octokit.rest.repos.createWebhook({
+        owner,
+        repo,
+        config: {
+          url: webhookUrl,
+          content_type: 'json',
+          // secret: 'your-webhook-secret', // Should be in env
+        },
+        events: ['pull_request'],
+        active: true,
+      });
+
+      // Track in database
+      await this.prisma.repository.upsert({
+        where: { githubId: response.data.id.toString() },
+        create: {
+          githubId: response.data.id.toString(),
+          userId,
+          name: repo,
+          owner,
+          isActive: true,
+          webhookId: response.data.id.toString(),
+        },
+        update: {
+          isActive: true,
+          webhookId: response.data.id.toString(),
+        },
+      });
+
+      return response.data;
+    } catch (error) {
+      // If hook already exists, we consider it a success and just sync our DB
+      if (error.message?.includes('Hook already exists')) {
+        this.logger.log(`Webhook already exists for ${owner}/${repo}, syncing database...`);
+        
+        // We still need to track it in our database
+        // Since we don't have the ID from the failed create call, 
+        // we'll try to find the existing hook ID or use a placeholder if needed.
+        // For simplicity, we'll just upsert without the response ID if it's already there.
+        await this.prisma.repository.upsert({
+          where: { githubId: `${owner}/${repo}` }, // Using full name as unique if ID unknown
+          create: {
+            githubId: `${owner}/${repo}`,
+            userId,
+            name: repo,
+            owner,
+            isActive: true,
+          },
+          update: {
+            isActive: true,
+          },
+        });
+        return { message: 'Webhook already active' };
+      }
+
+      this.logger.error(`Failed to register webhook: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Handle incoming GitHub webhooks
+   */
+  async handleGithubWebhook(payload: any) {
+    const event = payload.action;
+    const pr = payload.pull_request;
+    const repo = payload.repository;
+
+    if (!pr || !repo) return;
+
+    // We only care about opened or synchronized PRs
+    if (event !== 'opened' && event !== 'synchronize') {
+      this.logger.log(`Ignoring PR event: ${event}`);
+      return;
+    }
+
+    this.logger.log(`Processing automatic review for ${repo.full_name} PR #${pr.number}`);
+
+    // 1. Find the user who owns this repository connection
+    const repoRecord = await this.prisma.repository.findFirst({
+      where: { 
+        name: repo.name,
+        owner: repo.owner.login,
+        isActive: true
+      },
+      include: { user: true }
+    });
+
+    if (!repoRecord) {
+      this.logger.warn(`No active repository record found for ${repo.full_name}`);
+      return;
+    }
+
+    // 2. Fetch the diff from GitHub
+    // Note: We need a valid token. We'll use the user's last known token 
+    // In a real app, you'd store the refresh token or use a GitHub App token.
+    // For this demo, we'll assume we have a way to get the user's token.
+    const githubToken = await this.getUserGithubToken(repoRecord.userId);
+
+    const octokit = new Octokit({ auth: githubToken });
+    const { data: diff } = await octokit.rest.pulls.get({
+      owner: repo.owner.login,
+      repo: repo.name,
+      pull_number: pr.number,
+      headers: {
+        accept: 'application/vnd.github.v3.diff',
+      },
+    });
+
+    // 3. Trigger the analysis debate
+    await this.reviewerService.performDebateReview(
+      repoRecord.userId,
+      repo.name,
+      pr.number,
+      pr.title,
+      diff as any,
+      githubToken,
+      repo.owner.login,
+      pr.head.sha,
+      repoRecord.user.selectedModels || undefined,
+    );
+  }
+
+  /**
+   * Fetch user's GitHub token from database
+   */
+  private async getUserGithubToken(userId: string): Promise<string> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { githubToken: true }
+    });
+    
+    if (!user?.githubToken) {
+      throw new Error(`No GitHub token found for user ${userId}`);
+    }
+    
+    return user.githubToken;
+  }
+}
