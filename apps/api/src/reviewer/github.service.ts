@@ -23,14 +23,28 @@ export class GithubService {
 
     this.logger.log(`Posting ${findings.length} comments to ${owner}/${repo} PR #${prNumber}`);
 
-    // ... (rest of method remains same, just updating the body link)
-    
+    for (const finding of findings) {
+      try {
+        await octokit.rest.pulls.createReviewComment({
+          owner,
+          repo,
+          pull_number: prNumber,
+          body: `### AI Finding: ${finding.type}\n**Issue:** ${finding.issue}\n\n**Rationale:** ${finding.rationale}\n\n**Suggested Resolution:**\n\`\`\`\n${finding.resolution}\n\`\`\``,
+          path: finding.file,
+          line: finding.line,
+          side: 'RIGHT',
+        });
+      } catch (error) {
+        this.logger.warn(`Failed to post comment for ${finding.file}:${finding.line}: ${error.message}`);
+      }
+    }
+
     // Also post a summary comment
     await octokit.rest.issues.createComment({
       owner,
       repo,
       issue_number: prNumber,
-      body: `## AI Review Summary\nAnalysis completed. Total issues found: ${findings.length}\n[View full report and debate log](${frontendUrl}/dashboard)`,
+      body: `## 🤖 AI Multi-Agent Review Summary\n\nAnalysis completed. Total issues found: **${findings.length}**\n\n[View full report and debate log](${frontendUrl}/dashboard)`,
     });
   }
 

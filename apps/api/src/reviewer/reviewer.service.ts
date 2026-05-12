@@ -45,15 +45,15 @@ export class ReviewerService {
 
   // Actual NVIDIA NIM model IDs for mapping
   private readonly MODEL_MAPPING: Record<string, string> = {
-    'deepseek-v4-flash': 'deepseek-ai/deepseek-v2-chat', // Placeholder or real ID
-    'deepseek-v4-pro': 'deepseek-ai/deepseek-v2-chat',
-    'mistral-medium-3.5': 'mistralai/mixtral-8x22b-instruct-v0.1',
-    'mistral-small-4': 'mistralai/mistral-7b-instruct-v0.3',
-    'minimax-m2.7': 'nvidia/nemotron-4-340b-instruct',
-    'nemotron-3-super': 'nvidia/nemotron-4-340b-instruct',
-    'llama-3.1': 'meta/llama-3.1-405b-instruct',
-    'gemma-3': 'google/gemma-2-27b-it',
-    'phi-4': 'microsoft/phi-3-medium-128k-instruct',
+    'deepseek-v4-flash': 'deepseek-ai/deepseek-v4-flash',
+    'deepseek-v4-pro': 'deepseek-ai/deepseek-v4-pro',
+    'mistral-medium-3.5': 'mistralai/mistral-medium-3.5-128b',
+    'mistral-small-4': 'mistralai/mistral-small-4-119b-2603',
+    'minimax-m2.7': 'minimaxai/minimax-m2.7',
+    'nemotron-3-super': 'nvidia/nemotron-3-super-120b-a12b',
+    'llama-3.1': 'meta/llama-3.1-70b-instruct',
+    'gemma-3': 'google/gemma-3-27b-it',
+    'phi-4': 'microsoft/phi-4-mini-instruct',
   };
 
   constructor(
@@ -86,9 +86,9 @@ export class ReviewerService {
     owner: string,
     headSha: string,
     selectedModels: string[] = [
-      'meta/llama-3.1-405b-instruct',
-      'nvidia/nemotron-4-340b-instruct',
-      'meta/llama-3.1-70b-instruct',
+      'llama-3.1',
+      'deepseek-v4-pro',
+      'mistral-medium-3.5',
     ],
   ) {
     this.logger.log(`Starting debate review for ${repoName} PR #${prNumber} with models: ${selectedModels.join(', ')}`);
@@ -173,6 +173,15 @@ export class ReviewerService {
   private async getAgentReview(modelId: string, diff: string) {
     const client = this.getClient(modelId);
     const model = this.MODEL_MAPPING[modelId] || modelId;
+    const apiKey = this.getModelKey(modelId);
+    
+    this.logger.debug(`AI Request: model=${model} key=${apiKey.substring(0, 10)}... URL=https://integrate.api.nvidia.com/v1`);
+
+    // Truncate diff to prevent exceeding the model's context window (max ~130k tokens)
+    const MAX_CHARS = 200000;
+    const safeDiff = diff.length > MAX_CHARS 
+      ? diff.substring(0, MAX_CHARS) + '\n\n...[DIFF TRUNCATED DUE TO LENGTH]...'
+      : diff;
 
     const prompt = `You are a Senior Security and Code Quality Engineer. 
 Review the following code diff and identify critical issues, vulnerabilities, and quality improvements.
@@ -182,7 +191,7 @@ Focus on:
 3. Clean code and architectural patterns.
 
 CODE DIFF:
-${diff}
+${safeDiff}
 
 Return your response in strict JSON format:
 {
@@ -197,18 +206,26 @@ Return your response in strict JSON format:
     const completion = await client.chat.completions.create({
       model,
       messages: [{ role: 'user', content: prompt }],
-      response_format: { type: 'json_object' },
     });
+
+    const content = completion.choices[0].message.content || '{}';
+    // Strip markdown code blocks if the model wrapped the JSON
+    const cleanContent = content.replace(/```json/g, '').replace(/```/g, '').trim();
 
     return {
       model: modelId,
-      content: JSON.parse(completion.choices[0].message.content),
+      content: JSON.parse(cleanContent),
     };
   }
 
   private async synthesizeConsensus(modelId: string, agentResponses: any[], diff: string): Promise<AIReviewResult> {
     const client = this.getClient(modelId);
     const model = this.MODEL_MAPPING[modelId] || modelId;
+
+    const MAX_CHARS = 200000;
+    const safeDiff = diff.length > MAX_CHARS 
+      ? diff.substring(0, MAX_CHARS) + '\n\n...[DIFF TRUNCATED DUE TO LENGTH]...'
+      : diff;
 
     const prompt = `You are the Lead Consensus Architect. 
 You have 3 independent AI agent reviews of a code change. 
@@ -218,7 +235,7 @@ AGENT REVIEWS:
 ${JSON.stringify(agentResponses, null, 2)}
 
 ORIGINAL DIFF:
-${diff}
+${safeDiff}
 
 Instructions:
 1. Only include findings where at least 2 agents agree, or 1 agent provides an extremely compelling security critical case.
@@ -237,9 +254,11 @@ Return your response in strict JSON format:
     const completion = await client.chat.completions.create({
       model,
       messages: [{ role: 'user', content: prompt }],
-      response_format: { type: 'json_object' },
     });
 
-    return JSON.parse(completion.choices[0].message.content) as AIReviewResult;
+    const content = completion.choices[0].message.content || '{}';
+    const cleanContent = content.replace(/```json/g, '').replace(/```/g, '').trim();
+
+    return JSON.parse(cleanContent) as AIReviewResult;
   }
 }

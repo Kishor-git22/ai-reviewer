@@ -94,8 +94,8 @@ export class WebhooksService {
 
     if (!pr || !repo) return;
 
-    // We only care about opened or synchronized PRs
-    if (event !== 'opened' && event !== 'synchronize') {
+    // We only care about opened, synchronized, or reopened PRs
+    if (event !== 'opened' && event !== 'synchronize' && event !== 'reopened') {
       this.logger.log(`Ignoring PR event: ${event}`);
       return;
     }
