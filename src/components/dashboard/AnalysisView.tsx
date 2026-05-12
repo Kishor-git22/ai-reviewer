@@ -146,127 +146,133 @@ export function AnalysisView({ pr, findings, onBack }: AnalysisViewProps) {
   const singleAgentFindings = findings.filter((f) => !f.consensus)
 
   return (
-    <div className="flex h-full flex-col">
-      {/* Header */}
-      <div className="flex items-center gap-4 border-b border-border px-6 py-4">
-        <Button variant="ghost" size="sm" onClick={onBack} className="gap-1">
+    <div className="flex min-h-full flex-col">
+      {/* View Header - Responsive flex-col on small screens */}
+      <div className="flex flex-col gap-4 border-b border-border/50 bg-background/50 px-4 py-6 backdrop-blur-sm sm:flex-row sm:items-center sm:px-8">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onBack}
+          className="w-fit gap-2 rounded-xl border border-border/50 bg-background px-4 hover:bg-accent"
+        >
           <ArrowLeft className="h-4 w-4" />
-          Back
+          <span className="font-bold">Back to Dashboard</span>
         </Button>
-        <div className="min-w-0 flex-1">
-          <div className="mb-1 flex items-center gap-2 font-mono text-xs text-blue-400">
+        <div className="min-w-0 flex-1 px-2">
+          <div className="mb-1 flex items-center gap-2 font-mono text-[10px] font-black uppercase tracking-widest text-blue-400">
             <Github className="h-3 w-3" />
             {pr.repo}
           </div>
-          <h1 className="truncate text-xl font-bold text-foreground">{pr.title}</h1>
+          <h1 className="truncate text-2xl font-black tracking-tight text-foreground">{pr.title}</h1>
         </div>
       </div>
 
-      {/* Content */}
-      <ScrollArea className="flex-1">
-        <div className="space-y-6 p-6">
-          {/* Stats Cards */}
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            <Card className="border-border">
-              <CardContent className="p-4 text-center">
-                <div className="text-2xl font-black text-blue-400">{pr.quality}%</div>
-                <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Quality Score
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border-border">
-              <CardContent className="p-4 text-center">
-                <div className="text-2xl font-black text-purple-400">{pr.recs}</div>
-                <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Recommendations
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border-border">
-              <CardContent className="p-4 text-center">
-                <div className="text-2xl font-black text-red-400">{pr.vuls}</div>
-                <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Vulnerabilities
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border-border">
-              <CardContent className="p-4 text-center">
-                <div className="text-2xl font-black text-green-400">{confirmedFindings.length}</div>
-                <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Confirmed Issues
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Refracted Consensus Explanation */}
-          <Card className="border-border bg-gradient-to-r from-blue-500/5 to-purple-500/5">
-            <CardContent className="p-4">
-              <div className="flex items-start gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-500/20">
-                  <Shield className="h-4 w-4 text-blue-400" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-foreground">
-                    Refracted Consensus Analysis
-                  </h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Findings marked as{' '}
-                    <span className="font-medium text-green-400">"Confirmed Consensus"</span> have
-                    been verified by 2+ AI agents agreeing on the same issue. Single-agent findings
-                    require manual review.
-                  </p>
-                </div>
+      {/* Main Content Area */}
+      <div className="mx-auto w-full max-w-7xl space-y-8 p-4 sm:p-8">
+        {/* Responsive Stats Grid */}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+          <Card className="border-border/50 bg-accent/20">
+            <CardContent className="p-4 text-center">
+              <div className="text-2xl font-black text-blue-400 sm:text-3xl">{pr.quality}%</div>
+              <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+                Score
               </div>
             </CardContent>
           </Card>
-
-          {/* Confirmed Findings */}
-          {confirmedFindings.length > 0 && (
-            <div className="space-y-3">
-              <h2 className="flex items-center gap-2 text-lg font-bold text-foreground">
-                <CheckCircle2 className="h-5 w-5 text-green-400" />
-                Confirmed Findings ({confirmedFindings.length})
-              </h2>
-              <div className="space-y-4">
-                {confirmedFindings.map((finding) => (
-                  <FindingCard key={finding.id} finding={finding} />
-                ))}
+          <Card className="border-border/50 bg-accent/20">
+            <CardContent className="p-4 text-center">
+              <div className="text-2xl font-black text-purple-400 sm:text-3xl">{pr.recs}</div>
+              <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+                Recs
               </div>
-            </div>
-          )}
-
-          {/* Single Agent Findings */}
-          {singleAgentFindings.length > 0 && (
-            <div className="space-y-3">
-              <h2 className="flex items-center gap-2 text-lg font-bold text-foreground">
-                <Info className="h-5 w-5 text-yellow-400" />
-                Single Agent Findings ({singleAgentFindings.length})
-              </h2>
-              <div className="space-y-4">
-                {singleAgentFindings.map((finding) => (
-                  <FindingCard key={finding.id} finding={finding} />
-                ))}
+            </CardContent>
+          </Card>
+          <Card className="border-border/50 bg-accent/20">
+            <CardContent className="p-4 text-center">
+              <div className="text-2xl font-black text-red-400 sm:text-3xl">{pr.vuls}</div>
+              <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+                Vuls
               </div>
-            </div>
-          )}
-
-          {/* No Findings */}
-          {findings.length === 0 && (
-            <Card className="border-border">
-              <CardContent className="p-8 text-center">
-                <CheckCircle2 className="mx-auto mb-4 h-12 w-12 text-green-400" />
-                <h3 className="mb-2 text-lg font-semibold text-foreground">No Issues Found</h3>
-                <p className="text-sm text-muted-foreground">
-                  All AI agents have reviewed this pull request and found no issues. Great job!
-                </p>
-              </CardContent>
-            </Card>
-          )}
+            </CardContent>
+          </Card>
+          <Card className="border-border/50 bg-accent/20">
+            <CardContent className="p-4 text-center">
+              <div className="text-2xl font-black text-green-400 sm:text-3xl">
+                {confirmedFindings.length}
+              </div>
+              <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+                Consensus
+              </div>
+            </CardContent>
+          </Card>
         </div>
-      </ScrollArea>
+
+        {/* Informational Card */}
+        <Card className="overflow-hidden border-border/50 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-transparent">
+          <CardContent className="p-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/20 shadow-inner">
+                <Shield className="h-5 w-5 text-blue-400" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-black tracking-tight text-foreground">
+                  Refracted Consensus Analysis
+                </h3>
+                <p className="text-sm font-medium leading-relaxed text-muted-foreground">
+                  Findings marked as{' '}
+                  <span className="font-bold text-green-400">"Confirmed Consensus"</span> have been
+                  cross-verified by multiple LLM agents. Single-agent findings are predictive and
+                  should be manually audited.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Confirmed Findings Section */}
+        {confirmedFindings.length > 0 && (
+          <div className="space-y-4">
+            <h2 className="flex items-center gap-2 text-xl font-black tracking-tight text-foreground">
+              <CheckCircle2 className="h-6 w-6 text-green-400" />
+              Confirmed Findings
+            </h2>
+            <div className="grid grid-cols-1 gap-4">
+              {confirmedFindings.map((finding) => (
+                <FindingCard key={finding.id} finding={finding} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Single Agent Findings Section */}
+        {singleAgentFindings.length > 0 && (
+          <div className="space-y-4 pt-4">
+            <h2 className="flex items-center gap-2 text-xl font-black tracking-tight text-foreground">
+              <Info className="h-6 w-6 text-yellow-400" />
+              Single Agent Findings
+            </h2>
+            <div className="grid grid-cols-1 gap-4">
+              {singleAgentFindings.map((finding) => (
+                <FindingCard key={finding.id} finding={finding} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Empty State */}
+        {findings.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="mb-6 rounded-full bg-green-500/10 p-6">
+              <CheckCircle2 className="h-12 w-12 text-green-400" />
+            </div>
+            <h3 className="text-xl font-black text-foreground">No Issues Found</h3>
+            <p className="mx-auto max-w-sm text-sm font-medium text-muted-foreground">
+              Prism's multi-agent review system found zero vulnerabilities or quality issues in this
+              pull request.
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

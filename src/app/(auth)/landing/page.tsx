@@ -1,7 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { signIn } from 'next-auth/react'
+import { useSearchParams } from 'next/navigation'
+import { toast } from 'sonner'
 import {
   Github,
   Code2,
@@ -14,6 +16,7 @@ import {
   Twitter,
   Linkedin,
   Mail,
+  AlertCircle,
 } from 'lucide-react'
 import { HeroPrism } from '@/components/canvas/HeroPrism'
 import { Button } from '@/components/ui/button'
@@ -21,6 +24,38 @@ import { NVIDIA_MODELS, LANDING_STATS, FEATURES } from '@/lib/data'
 
 export default function LandingPage() {
   const [isLoading, setIsLoading] = useState(false)
+  const searchParams = useSearchParams()
+  const error = searchParams.get('error')
+
+  useEffect(() => {
+    if (error) {
+      toast.error(getErrorMessage(error), {
+        description: 'Please try again or contact support if the issue persists.',
+        duration: 5000,
+      })
+    }
+  }, [error])
+
+  const getErrorMessage = (error: string) => {
+    switch (error) {
+      case 'OAuthSignin':
+      case 'OAuthCallback':
+      case 'OAuthCreateAccount':
+      case 'EmailCreateAccount':
+      case 'Callback':
+        return 'There was an issue with the GitHub login. Please try again.'
+      case 'OAuthAccountNotLinked':
+        return 'To confirm your identity, please sign in with the same account you used originally.'
+      case 'EmailSignin':
+        return 'The e-mail could not be sent.'
+      case 'CredentialsSignin':
+        return 'Sign in failed. Check the details you provided are correct.'
+      case 'SessionRequired':
+        return 'Please sign in to access this page.'
+      default:
+        return 'An unexpected error occurred. Please try again.'
+    }
+  }
 
   const handleLogin = async () => {
     setIsLoading(true)
@@ -85,6 +120,7 @@ export default function LandingPage() {
                 The world&apos;s first open-source reviewer that refracts every pull request through
                 3 massive AI models to eliminate false positives.
               </p>
+
 
               <div className="flex flex-col items-center justify-center gap-4 sm:flex-row lg:justify-start">
                 <Button

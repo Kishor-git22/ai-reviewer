@@ -9,10 +9,16 @@ export const {
   signIn,
   signOut,
 } = NextAuth({
+  basePath: '/api/auth',
   providers: [
     GitHub({
       clientId: process.env.AUTH_GITHUB_ID!,
       clientSecret: process.env.AUTH_GITHUB_SECRET!,
+      authorization: {
+        params: {
+          scope: 'read:user user:email repo',
+        },
+      },
       // Scrape only user.login and user.image as per privacy requirements
       profile(profile) {
         return {
@@ -34,9 +40,55 @@ export const {
       }
       return true
     },
-    session({ session, token }) {
-      if (token.sub && session.user) {
-        session.user.id = token.sub
+    async signIn({ account }) {
+      if (account?.provider === 'github' && account.access_token) {
+        try {
+          // Sync with our backend to get a backend JWT
+          const response = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}/auth/github/sync`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                accessToken: account.access_token,
+              }),
+            }
+          )
+
+          if (!response.ok) {
+            console.error('Backend sync failed')
+            return false
+          }
+
+          const data = await response.json()
+          // Store backend token in the account object so it's available in the JWT callback
+          account.backendToken = data.data.accessToken
+          return true
+        } catch (error) {
+          console.error('Error syncing with backend:', error)
+          return false
+        }
+      }
+      return true
+    },
+    async jwt({ token, account, user }) {
+      if (account) {
+        token.backendToken = account.backendToken as string
+        token.githubToken = account.access_token as string
+      }
+      if (user) {
+        token.username = (user as any).name
+      }
+      return token
+    },
+    async session({ session, token }) {
+      if (session.user) {
+        session.user.id = token.sub!
+        session.user.accessToken = token.backendToken as string
+        session.user.githubToken = token.githubToken as string
+        session.user.login = token.username as string
       }
       return session
     },
@@ -50,3 +102,28 @@ export const {
   },
   trustHost: true,
 })
+
+// Module augmentation for NextAuth types
+declare module 'next-auth' {
+  interface User {
+    id: string
+    name: string
+    email: string
+    image: string
+    login: string
+    accessToken: string
+    githubToken: string
+  }
+
+  interface Session {
+    user: User
+  }
+}
+
+declare module 'next-auth/jwt' {
+  interface JWT {
+    backendToken?: string
+    githubToken?: string
+    username?: string
+  }
+}

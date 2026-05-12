@@ -9,9 +9,5 @@ export default async function DashboardLayout({ children }: { children: React.Re
     redirect('/')
   }
 
-  return (
-    <div className="flex h-screen overflow-hidden">
-      <DashboardSidebar>{children}</DashboardSidebar>
-    </div>
-  )
+  return <DashboardSidebar>{children}</DashboardSidebar>
 }
