@@ -32,9 +32,17 @@ interface AnalysisViewProps {
 }
 
 function FindingCard({ finding }: { finding: BackendFinding }) {
+  const isCritical = finding.type === 'Critical' || finding.type === 'Vulnerability'
+  const isWarning = finding.type === 'Warning'
+  
+  const Icon = isCritical ? Shield : isWarning ? AlertCircle : Info
+  const color = isCritical ? 'text-red-400' : isWarning ? 'text-yellow-400' : 'text-blue-400'
+  const bg = isCritical ? 'bg-red-500/10' : isWarning ? 'bg-yellow-500/10' : 'bg-blue-500/10'
+  const border = isCritical ? 'border-red-500/20' : isWarning ? 'border-yellow-500/20' : 'border-blue-500/20'
+
   return (
-    <Card className="border-border bg-card">
-      <CardHeader className="pb-3">
+    <Card className="overflow-hidden border-border/50 bg-card/30 backdrop-blur-sm transition-all hover:border-primary/30 hover:bg-card/50">
+      <CardHeader className="pb-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2">
             <Badge
@@ -70,45 +78,49 @@ function FindingCard({ finding }: { finding: BackendFinding }) {
             {finding.file}:{finding.line}
           </div>
         </div>
-        <CardTitle className="mt-2 text-lg font-bold text-foreground">{finding.issue}</CardTitle>
+        <CardTitle className="mt-2 text-xl font-black tracking-tight text-foreground">
+          {finding.issue}
+        </CardTitle>
       </CardHeader>
 
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <CardContent className="space-y-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {/* Analysis Rationale */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-1 text-[10px] font-black uppercase text-muted-foreground">
-              <Info className="h-3 w-3" />
-              Analysis Rationale
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+              <div className={cn("h-1.5 w-1.5 rounded-full", isCritical ? "bg-red-500" : "bg-primary")} />
+              The "Why"
             </div>
-            <p className="text-sm leading-relaxed text-foreground">{finding.rationale}</p>
+            <p className="text-sm font-medium leading-relaxed text-foreground/80">
+              {finding.rationale}
+            </p>
           </div>
 
           {/* Resolution */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-1 text-[10px] font-black uppercase text-blue-500">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-blue-400">
               <Lightbulb className="h-3 w-3" />
-              Recommended Resolution
+              The "How" (Solution)
             </div>
-            <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3">
-              <p className="font-mono text-sm leading-relaxed text-blue-300">
+            <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4 shadow-inner">
+              <p className="font-mono text-xs leading-relaxed text-blue-300">
                 {finding.resolution}
               </p>
             </div>
           </div>
         </div>
 
-        {/* Reference & Models */}
-        <div className="flex flex-col justify-between gap-4 border-t border-border pt-2 sm:flex-row sm:items-center">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-black uppercase text-muted-foreground">
-              Detected by:
+        {/* Footer info */}
+        <div className="flex flex-col justify-between gap-4 border-t border-border/50 pt-4 sm:flex-row sm:items-center">
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+              Analyzed by:
             </span>
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap gap-1.5">
               {finding.models.map((model) => (
                 <span
                   key={model}
-                  className="inline-block rounded border border-border bg-muted px-2 py-0.5 text-[10px] text-muted-foreground"
+                  className="inline-block rounded-full border border-border/50 bg-accent/50 px-3 py-1 text-[9px] font-bold text-muted-foreground"
                 >
                   {model}
                 </span>
@@ -117,20 +129,22 @@ function FindingCard({ finding }: { finding: BackendFinding }) {
           </div>
 
           <div className="flex items-center gap-2">
-            <a
-              href={(finding as any).reference || '#'}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-blue-400 hover:underline"
-            >
-              Documentation
-              <ExternalLink className="h-3 w-3" />
-            </a>
+            {(finding as any).reference && (
+              <a
+                href={(finding as any).reference}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-4 py-1.5 text-[10px] font-black uppercase tracking-widest text-primary transition-all hover:bg-primary/20"
+              >
+                Reference
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            )}
 
             <AgentDebateLog finding={finding as any}>
-              <Button variant="outline" size="sm" className="gap-1 text-xs">
+              <Button variant="ghost" size="sm" className="h-8 gap-1.5 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-accent">
                 <MessageSquare className="h-3 w-3" />
-                View Debate
+                Debate Log
               </Button>
             </AgentDebateLog>
           </div>
