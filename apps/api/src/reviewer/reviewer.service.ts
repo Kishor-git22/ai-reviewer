@@ -13,6 +13,7 @@ export interface AIReviewResult {
     confidence: 'High' | 'Medium' | 'Low';
     rationale: string;
     resolution: string;
+    reference: string;
   }>;
   qualityScore: number;
   securityScore: number;
@@ -102,8 +103,11 @@ export class ReviewerService {
     });
 
     if (existingAnalysis) {
-      this.logger.warn(`Analysis already in progress for ${repoName} PR #${prNumber}. Skipping redundant request.`);
-      return existingAnalysis.id;
+      this.logger.log(`Analysis for ${repoName} PR #${prNumber} already in progress. Mark as cancelled and starting fresh.`);
+      await this.prisma.analysis.update({
+        where: { id: existingAnalysis.id },
+        data: { status: 'failed' }
+      });
     }
 
     this.logger.log(`Starting debate review for ${repoName} PR #${prNumber} with models: ${selectedModels.join(', ')}`);
@@ -258,29 +262,50 @@ Focus on:
 CODE DIFF:
 ${safeDiff}
 
+IMPORTANT: Your response must be STABLE, VALID JSON.
+1. Use double quotes for all keys and strings.
+2. ESCAPE all backslashes as \\\\ and double quotes as \\\".
+3. Do NOT use literal newlines inside strings.
+4. DO NOT use markdown tables, bullet points, or any other formatting.
+5. Output ONLY the raw JSON object. Do not include any preamble, postamble, or explanation.
+6. The response MUST start with { and end with }.
+
 Return your response in strict JSON format:
 {
   "findings": [
-    { "file": "string", "line": number, "issue": "string", "type": "Critical|Vulnerability|Warning|Info", "confidence": "High|Medium|Low", "rationale": "string", "resolution": "string" }
+    { "file": "string", "line": number, "issue": "string", "type": "Critical|Vulnerability|Warning|Info", "confidence": "High|Medium|Low", "rationale": "string", "resolution": "string", "reference": "URL (OWASP, CWE, or documentation link)" }
   ],
   "qualityScore": number (0-100),
   "securityScore": number (0-100),
   "summary": "string"
 }`;
 
-    const completion = await client.chat.completions.create({
-      model,
-      messages: [{ role: 'user', content: prompt }],
-    });
+    let completion;
+    let retries = 2;
+    
+    while (retries >= 0) {
+      try {
+        completion = await client.chat.completions.create({
+          model,
+          messages: [
+            { role: 'system', content: 'You are a strict JSON generator. You MUST output ONLY raw JSON. No preamble, no postamble, no code blocks, no explanation. Your entire response must be a single JSON object.' },
+            { role: 'user', content: prompt }
+          ],
+        });
+        break;
+      } catch (error: any) {
+        if (error.status === 504 && retries > 0) {
+          this.logger.warn(`Agent review for ${modelId} failed with 504, retrying... (${retries} left)`);
+          retries--;
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          continue;
+        }
+        throw error;
+      }
+    }
 
     const content = completion.choices[0].message.content || '{}';
-    // Extract JSON object ignoring conversational prefix/suffix
-    const startIndex = content.indexOf('{');
-    const endIndex = content.lastIndexOf('}');
-    let cleanContent = '{}';
-    if (startIndex !== -1 && endIndex !== -1 && endIndex >= startIndex) {
-      cleanContent = content.substring(startIndex, endIndex + 1);
-    }
+    const cleanContent = this.extractJsonBlock(content);
 
     return {
       model: modelId,
@@ -313,30 +338,83 @@ Instructions:
 3. Calculate the final Quality and Security scores.
 4. Provide a high-level summary of the "Debate" and final verdict.
 5. IMPORTANT: Output ONLY the JSON object. Do not include any text before or after.
-6. IMPORTANT: Ensure the JSON is valid. No trailing commas in arrays or objects.
+6. IMPORTANT: Ensure the JSON is valid. Escape all backslashes as \\\\ and double quotes as \\\".
+7. IMPORTANT: Do not include literal newlines inside JSON strings.
 
 Return your response in strict JSON format:
 {
-  "findings": [...],
+  "findings": [
+    { "file": "string", "line": number, "issue": "string", "type": "Critical|Vulnerability|Warning|Info", "confidence": "High|Medium|Low", "rationale": "string", "resolution": "string", "reference": "URL" }
+  ],
   "qualityScore": number,
   "securityScore": number,
   "summary": "string"
 }`;
 
-    const completion = await client.chat.completions.create({
-      model,
-      messages: [{ role: 'user', content: prompt }],
-    });
-
-    const content = completion.choices[0].message.content || '{}';
-    const startIndex = content.indexOf('{');
-    const endIndex = content.lastIndexOf('}');
-    let cleanContent = '{}';
-    if (startIndex !== -1 && endIndex !== -1 && endIndex >= startIndex) {
-      cleanContent = content.substring(startIndex, endIndex + 1);
+    let completion;
+    let retries = 2;
+    
+    while (retries >= 0) {
+      try {
+        completion = await client.chat.completions.create({
+          model,
+          messages: [
+            { role: 'system', content: 'You are a strict JSON generator. You MUST output ONLY raw JSON. No preamble, no postamble, no code blocks, no explanation. Your entire response must be a single JSON object.' },
+            { role: 'user', content: prompt }
+          ],
+        });
+        break;
+      } catch (error) {
+        if (error.status === 504 && retries > 0) {
+          this.logger.warn(`Synthesis failed with 504, retrying... (${retries} left)`);
+          retries--;
+          await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5s
+          continue;
+        }
+        throw error;
+      }
     }
 
+    const content = completion.choices[0].message.content || '{}';
+    const cleanContent = this.extractJsonBlock(content);
+
     return this.safeJsonParse(cleanContent);
+  }
+
+  /**
+   * Extracts the most likely JSON block from a string containing conversational text or code
+   */
+  private extractJsonBlock(content: string): string {
+    // 1. First try to find a block between ```json and ```
+    const codeBlockMatch = content.match(/```json\s*([\s\S]*?)\s*```/);
+    if (codeBlockMatch && codeBlockMatch[1]) {
+      return codeBlockMatch[1].trim();
+    }
+
+    // 2. Otherwise look for the block that contains our expected keys
+    const markerRegex = /["']?(findings|qualityScore|summary)["']?\s*:/;
+    const match = content.match(markerRegex);
+    
+    if (match && match.index !== undefined) {
+      // Find the { that starts the object containing this marker
+      const potentialStart = content.lastIndexOf('{', match.index);
+      if (potentialStart !== -1) {
+        // Find the matching } by looking for the last one in the file
+        const lastEnd = content.lastIndexOf('}');
+        if (lastEnd > potentialStart) {
+          return content.substring(potentialStart, lastEnd + 1);
+        }
+      }
+    }
+
+    // Fallback: Just try to find the largest block between { and }
+    const firstStart = content.indexOf('{');
+    const lastEnd = content.lastIndexOf('}');
+    if (firstStart !== -1 && lastEnd !== -1 && lastEnd > firstStart) {
+      return content.substring(firstStart, lastEnd + 1);
+    }
+
+    return content;
   }
 
   /**
@@ -353,23 +431,39 @@ Return your response in strict JSON format:
       
       // 1. Remove markdown code blocks if any
       fixed = fixed.replace(/^```json\s*/, '').replace(/```$/, '');
+
+      // 2. Strip pipe characters (markdown table remnants)
+      // We only do this if it looks like a hybrid table/json output
+      if (fixed.includes('|')) {
+        fixed = fixed.replace(/^\||\|$/gm, '') // Remove start/end pipes
+                   .replace(/\|/g, ',');       // Replace middle pipes with commas (common hybrid error)
+      }
       
-      // 2. Replace single quotes with double quotes for keys and values
+      // 3. Replace single quotes with double quotes for keys and values
       // This regex handles keys: 'key': and values: : 'value'
       fixed = fixed.replace(/'([^']+)':/g, '"$1":');
       fixed = fixed.replace(/:\s*'([^']*)'/g, ': "$1"');
       
       // 3. Wrap unquoted keys in double quotes
-      // Matches alphanumeric keys followed by a colon
       fixed = fixed.replace(/([{,]\s*)([a-zA-Z0-9_]+)\s*:/g, '$1"$2":');
 
-      // 4. Remove trailing commas in arrays/objects
+      // 4. Handle "Bad escaped character" by escaping backslashes
+      // We look for backslashes that aren't followed by a valid escape char (n, r, t, ", \, /)
+      fixed = fixed.replace(/\\(?![nr"t\\\/])/g, '\\\\');
+
+      // 5. Replace literal newlines inside strings with \n
+      // This is complex, but we can do a rough pass for newlines between double quotes
+      fixed = fixed.replace(/(".*?")/gs, (match) => {
+        return match.replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+      });
+
+      // 6. Remove trailing commas in arrays/objects
       fixed = fixed.replace(/,(\s*[\]}])/g, '$1');
       
-      // 5. Fix missing commas between array elements (objects)
+      // 7. Fix missing commas between array elements (objects)
       fixed = fixed.replace(/\}\s*\{/g, '},{');
       
-      // 6. Ensure it starts with { and ends with }
+      // 8. Ensure it starts with { and ends with }
       if (!fixed.startsWith('{')) fixed = '{' + fixed;
       if (!fixed.endsWith('}')) fixed = fixed + '}';
 
