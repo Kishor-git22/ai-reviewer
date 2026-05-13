@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useAnalysis, useAnalyzePR, useRegisterWebhook, useActiveRepos, useUserSettings } from '@/hooks/usePrAnalysis'
+import { useState, useEffect } from 'react'
+import { useAnalysis, useAnalyzePR, useRegisterWebhook, useActiveRepos, useUserSettings, useAnalysisByPr } from '@/hooks/usePrAnalysis'
 import { useRepos, useRepoPRs } from '@/hooks/useGitHub'
 import { AnalysisView } from '@/components/dashboard/AnalysisView'
 import { NVIDIA_MODELS } from '@/components/dashboard/ModelSelector'
@@ -151,6 +151,18 @@ export default function DashboardPage() {
   )
   
   const { data: analysis, isLoading: isAnalysisLoading } = useAnalysis(currentAnalysisId)
+  const { data: prAnalysis, isLoading: isPrAnalysisLoading } = useAnalysisByPr(
+    selectedRepo?.name, 
+    selectedPr ? (selectedPr as any).number : undefined
+  )
+
+  useEffect(() => {
+    if (selectedPr && prAnalysis && !currentAnalysisId) {
+      setCurrentAnalysisId(prAnalysis.id)
+      setShowModelSelection(false)
+    }
+  }, [selectedPr, prAnalysis, currentAnalysisId])
+
   const analyzeMutation = useAnalyzePR()
 
   const handleToggleActive = async (repo: Repository) => {
@@ -242,6 +254,28 @@ export default function DashboardPage() {
         {currentAnalysisId ? (
           analysis?.status === 'completed' ? (
             <AnalysisView pr={selectedPr!} analysis={analysis} onBack={handleBackToPrs} />
+          ) : analysis?.status === 'failed' ? (
+            <div className="flex h-full flex-col items-center justify-center space-y-8 py-20 text-center">
+              <div className="rounded-full bg-red-500/10 p-6 text-red-500 border border-red-500/20 shadow-2xl shadow-red-500/10">
+                <AlertCircle size={48} />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-2xl font-black text-foreground">Analysis Failed</h2>
+                <p className="text-sm font-bold text-muted-foreground max-w-md">
+                  The AI agents encountered an error while processing this Pull Request. This can happen with extremely large diffs or API timeouts.
+                </p>
+              </div>
+              <Button 
+                onClick={() => {
+                  setCurrentAnalysisId(null);
+                  setShowModelSelection(true);
+                }} 
+                variant="outline" 
+                className="rounded-full px-8 h-12 font-black border-primary/20 hover:bg-primary/5 transition-all"
+              >
+                Retry Analysis
+              </Button>
+            </div>
           ) : (
             <div className="flex h-full flex-col items-center justify-center space-y-8 py-20">
               <div className="relative">
