@@ -70,6 +70,7 @@ export class ReviewerService {
     return new OpenAI({
       baseURL: 'https://integrate.api.nvidia.com/v1',
       apiKey,
+      timeout: 900000, // 15 minutes
     });
   }
 
@@ -91,7 +92,29 @@ export class ReviewerService {
       'mistral-medium-3.5',
     ],
   ) {
+    // 0. Check if an analysis is already in progress for this PR
+    const existingAnalysis = await this.prisma.analysis.findFirst({
+      where: {
+        repoName,
+        prNumber,
+        status: 'in_progress',
+      },
+    });
+
+    if (existingAnalysis) {
+      this.logger.warn(`Analysis already in progress for ${repoName} PR #${prNumber}. Skipping redundant request.`);
+      return existingAnalysis.id;
+    }
+
     this.logger.log(`Starting debate review for ${repoName} PR #${prNumber} with models: ${selectedModels.join(', ')}`);
+    this.logger.log(`Diff size: ${diff.length} characters`);
+
+    // Truncate diff if it's too large to prevent 504 timeouts
+    let processedDiff = diff;
+    if (diff.length > 40000) {
+      this.logger.warn(`Diff too large (${diff.length} chars). Truncating to 40,000 chars.`);
+      processedDiff = diff.substring(0, 40000) + '\n\n... [Diff truncated due to size] ...';
+    }
 
     // 1. Create initial analysis record
     const analysis = await this.prisma.analysis.create({
@@ -106,16 +129,44 @@ export class ReviewerService {
     });
 
     try {
+      // Set initial progress
+      await this.githubService.updateCommitStatus(
+        githubToken,
+        owner,
+        repoName,
+        headSha,
+        'pending',
+        'AI Agents are analyzing the code... 15%',
+      );
+
       // 2. Run analysis in parallel across 3 agents
       const agentPrompts = selectedModels.map((model) => 
-        this.getAgentReview(model, diff)
+        this.getAgentReview(model, processedDiff)
       );
 
       const agentResponses = await Promise.all(agentPrompts);
 
+      await this.githubService.updateCommitStatus(
+        githubToken,
+        owner,
+        repoName,
+        headSha,
+        'pending',
+        'Agents are debating consensus... 65%',
+      );
+
       // 3. Perform Consensus synthesis (Agent Debate)
       // We use the most powerful model (usually the first one or Llama 3.1 405B) to synthesize the results
-      const synthesis = await this.synthesizeConsensus(selectedModels[0], agentResponses, diff);
+      const synthesis = await this.synthesizeConsensus(selectedModels[0], agentResponses, processedDiff);
+
+      await this.githubService.updateCommitStatus(
+        githubToken,
+        owner,
+        repoName,
+        headSha,
+        'pending',
+        'Finalizing the review report... 90%',
+      );
 
       // 4. Store findings and update analysis
       await this.prisma.$transaction([
@@ -148,24 +199,38 @@ export class ReviewerService {
         repoName,
         prNumber,
         synthesis.findings,
+        headSha,
       );
 
-      // 6. Update Check Run
-      await this.githubService.createCheckRun(
+      // 6. Update Status to Success
+      await this.githubService.updateCommitStatus(
         githubToken,
         owner,
         repoName,
         headSha,
-        analysis.id,
+        'success',
+        'AI Analysis Complete! 100% Done.',
       );
 
       return analysis.id;
     } catch (error) {
       this.logger.error(`Analysis failed for PR #${prNumber}: ${error.message}`);
+      
       await this.prisma.analysis.update({
         where: { id: analysis.id },
-        data: { status: 'failed', summary: error.message },
+        data: { status: 'failed' },
       });
+
+      // Update GitHub with error status
+      await this.githubService.updateCommitStatus(
+        githubToken,
+        owner,
+        repoName,
+        headSha,
+        'error',
+        `Analysis failed: ${error.message.substring(0, 50)}...`,
+      );
+
       throw error;
     }
   }
@@ -209,12 +274,17 @@ Return your response in strict JSON format:
     });
 
     const content = completion.choices[0].message.content || '{}';
-    // Strip markdown code blocks if the model wrapped the JSON
-    const cleanContent = content.replace(/```json/g, '').replace(/```/g, '').trim();
+    // Extract JSON object ignoring conversational prefix/suffix
+    const startIndex = content.indexOf('{');
+    const endIndex = content.lastIndexOf('}');
+    let cleanContent = '{}';
+    if (startIndex !== -1 && endIndex !== -1 && endIndex >= startIndex) {
+      cleanContent = content.substring(startIndex, endIndex + 1);
+    }
 
     return {
       model: modelId,
-      content: JSON.parse(cleanContent),
+      content: this.safeJsonParse(cleanContent),
     };
   }
 
@@ -242,6 +312,8 @@ Instructions:
 2. Deduplicate similar findings.
 3. Calculate the final Quality and Security scores.
 4. Provide a high-level summary of the "Debate" and final verdict.
+5. IMPORTANT: Output ONLY the JSON object. Do not include any text before or after.
+6. IMPORTANT: Ensure the JSON is valid. No trailing commas in arrays or objects.
 
 Return your response in strict JSON format:
 {
@@ -257,8 +329,66 @@ Return your response in strict JSON format:
     });
 
     const content = completion.choices[0].message.content || '{}';
-    const cleanContent = content.replace(/```json/g, '').replace(/```/g, '').trim();
+    const startIndex = content.indexOf('{');
+    const endIndex = content.lastIndexOf('}');
+    let cleanContent = '{}';
+    if (startIndex !== -1 && endIndex !== -1 && endIndex >= startIndex) {
+      cleanContent = content.substring(startIndex, endIndex + 1);
+    }
 
-    return JSON.parse(cleanContent) as AIReviewResult;
+    return this.safeJsonParse(cleanContent);
+  }
+
+  /**
+   * Safe JSON parser that attempts to fix common LLM mistakes
+   */
+  private safeJsonParse(content: string): any {
+    try {
+      return JSON.parse(content);
+    } catch (e) {
+      this.logger.warn(`JSON parse failed, attempting recovery...`);
+      this.logger.debug(`Malformed JSON snippet: ${content.substring(0, 100)}...`);
+      
+      let fixed = content.trim();
+      
+      // 1. Remove markdown code blocks if any
+      fixed = fixed.replace(/^```json\s*/, '').replace(/```$/, '');
+      
+      // 2. Replace single quotes with double quotes for keys and values
+      // This regex handles keys: 'key': and values: : 'value'
+      fixed = fixed.replace(/'([^']+)':/g, '"$1":');
+      fixed = fixed.replace(/:\s*'([^']*)'/g, ': "$1"');
+      
+      // 3. Wrap unquoted keys in double quotes
+      // Matches alphanumeric keys followed by a colon
+      fixed = fixed.replace(/([{,]\s*)([a-zA-Z0-9_]+)\s*:/g, '$1"$2":');
+
+      // 4. Remove trailing commas in arrays/objects
+      fixed = fixed.replace(/,(\s*[\]}])/g, '$1');
+      
+      // 5. Fix missing commas between array elements (objects)
+      fixed = fixed.replace(/\}\s*\{/g, '},{');
+      
+      // 6. Ensure it starts with { and ends with }
+      if (!fixed.startsWith('{')) fixed = '{' + fixed;
+      if (!fixed.endsWith('}')) fixed = fixed + '}';
+
+      try {
+        return JSON.parse(fixed);
+      } catch (e2) {
+        this.logger.error(`JSON recovery failed: ${e2.message}`);
+        
+        // Final fallback: Try to extract at least some fields via regex if the structure is totally broken
+        const qualityScoreMatch = content.match(/"qualityScore":\s*(\d+)/);
+        const securityScoreMatch = content.match(/"securityScore":\s*(\d+)/);
+        
+        return {
+          findings: [],
+          qualityScore: qualityScoreMatch ? parseInt(qualityScoreMatch[1], 10) : 0,
+          securityScore: securityScoreMatch ? parseInt(securityScoreMatch[1], 10) : 0,
+          summary: 'Critical: The AI generated an invalid JSON response that could not be repaired. Showing partial results.'
+        };
+      }
+    }
   }
 }
