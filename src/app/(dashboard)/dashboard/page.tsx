@@ -325,7 +325,7 @@ export default function DashboardPage() {
               </div>
 
               {(selectedRepo ? isPrsLoading : isReposLoading) ? (
-                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div className="flex flex-col gap-6">
                   {[...Array(6)].map((_, i) => (
                     <div key={i} className="h-28 animate-pulse rounded-[2rem] bg-accent/30" />
                   ))}
@@ -352,7 +352,7 @@ export default function DashboardPage() {
                   </div>
                 )
               ) : repos?.length ? (
-                <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+                <div className="flex flex-col gap-6">
                   {repos.map((repo) => {
                     const isActive = activeRepos?.some((ar: any) => ar.name === repo.name && ar.owner === repo.owner.login)
                     return (
