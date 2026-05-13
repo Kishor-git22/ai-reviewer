@@ -1,159 +1,183 @@
-'use client'
-
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { PullRequest, PRAnalysis, Finding } from '@/types'
-import { MOCK_PRS, MOCK_FINDINGS } from '@/lib/data'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { PullRequest, PRAnalysis, Finding, Analysis } from '@/types'
+import { useSession } from 'next-auth/react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
-// Query keys for TanStack Query
-export const prQueryKeys = {
-  all: ['prs'] as const,
-  lists: () => [...prQueryKeys.all, 'list'] as const,
-  list: (filters: { repo?: string; status?: string }) => [...prQueryKeys.lists(), filters] as const,
-  details: () => [...prQueryKeys.all, 'detail'] as const,
-  detail: (id: string | number) => [...prQueryKeys.details(), id] as const,
-  analysis: (id: string | number) => [...prQueryKeys.all, 'analysis', id] as const,
-}
-
-interface UsePRsOptions {
-  repo?: string
-  status?: string
-  enabled?: boolean
-}
-
-// Hook to fetch all PRs
-export function usePRs(options: UsePRsOptions = {}) {
-  const { repo, status, enabled = true } = options
+// Hook to fetch analysis from backend
+export function useAnalysis(id: string | null) {
+  const { data: session } = useSession()
+  const token = session?.user?.accessToken
 
   return useQuery({
-    queryKey: prQueryKeys.list({ repo, status }),
-    queryFn: async (): Promise<PullRequest[]> => {
-      // In production, this would be:
-      // const response = await fetch(`${API_URL}/api/prs?repo=${repo}&status=${status}`)
-      // if (!response.ok) throw new Error('Failed to fetch PRs')
-      // return response.json()
-
-      // Mock implementation for now
-      await new Promise((resolve) => setTimeout(resolve, 500))
-
-      let filtered = [...MOCK_PRS]
-      if (repo) {
-        filtered = filtered.filter((pr) => pr.repo.toLowerCase().includes(repo.toLowerCase()))
-      }
-      if (status) {
-        filtered = filtered.filter((pr) => pr.status === status)
-      }
-
-      return filtered
-    },
-    enabled,
-    staleTime: 1000 * 60 * 5, // 5 minutes
-  })
-}
-
-// Hook to fetch a single PR
-export function usePR(id: string | number | null) {
-  return useQuery({
-    queryKey: prQueryKeys.detail(id ?? ''),
-    queryFn: async (): Promise<PullRequest | null> => {
+    queryKey: ['analysis', id],
+    queryFn: async (): Promise<Analysis | null> => {
       if (!id) return null
-
-      // In production:
-      // const response = await fetch(`${API_URL}/api/prs/${id}`)
-      // if (!response.ok) throw new Error('Failed to fetch PR')
-      // return response.json()
-
-      await new Promise((resolve) => setTimeout(resolve, 300))
-      return MOCK_PRS.find((pr) => pr.id === id) || null
-    },
-    enabled: !!id,
-  })
-}
-
-// Hook to fetch PR analysis with findings
-export function usePRAnalysis(id: string | number | null) {
-  return useQuery({
-    queryKey: prQueryKeys.analysis(id ?? ''),
-    queryFn: async (): Promise<PRAnalysis | null> => {
-      if (!id) return null
-
-      // In production:
-      // const response = await fetch(`${API_URL}/api/prs/${id}/analysis`)
-      // if (!response.ok) throw new Error('Failed to fetch analysis')
-      // return response.json()
-
-      await new Promise((resolve) => setTimeout(resolve, 800))
-
-      const pr = MOCK_PRS.find((p) => p.id === id)
-      if (!pr) return null
-
-      // Filter findings that are confirmed (2+ agents agree)
-      const confirmedFindings = MOCK_FINDINGS.filter((f) => f.consensus)
-
-      return {
-        pr,
-        findings: confirmedFindings,
-        summary: {
-          totalFiles: 12,
-          linesChanged: 245,
-          qualityScore: pr.quality,
-          securityIssues: pr.vuls,
-          recommendations: pr.recs,
+      
+      const response = await fetch(`${API_URL}/reviewer/analysis/${id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
-      }
+      })
+      
+      if (!response.ok) throw new Error('Failed to fetch analysis')
+      return response.json()
     },
-    enabled: !!id,
-    staleTime: 1000 * 60 * 2, // 2 minutes
+    enabled: !!id && !!token,
+    refetchInterval: (query) => {
+      // Poll if analysis is in progress
+      const analysis = query.state.data as Analysis | null
+      return analysis?.status === 'in_progress' ? 3000 : false
+    },
   })
 }
 
-// Hook to prefetch PR data
-export function usePrefetchPR() {
+// Hook to trigger a new analysis
+export function useAnalyzePR() {
+  const { data: session } = useSession()
+  const token = session?.user?.accessToken
+  const githubToken = session?.user?.githubToken
   const queryClient = useQueryClient()
 
-  return {
-    prefetchPR: (id: string | number) => {
-      queryClient.prefetchQuery({
-        queryKey: prQueryKeys.detail(id),
-        queryFn: async () => MOCK_PRS.find((pr) => pr.id === id) || null,
-        staleTime: 1000 * 60 * 5,
-      })
-    },
-    prefetchAnalysis: (id: string | number) => {
-      queryClient.prefetchQuery({
-        queryKey: prQueryKeys.analysis(id),
-        queryFn: async () => {
-          const pr = MOCK_PRS.find((p) => p.id === id)
-          if (!pr) return null
-          return {
-            pr,
-            findings: MOCK_FINDINGS.filter((f) => f.consensus),
-            summary: {
-              totalFiles: 12,
-              linesChanged: 245,
-              qualityScore: pr.quality,
-              securityIssues: pr.vuls,
-              recommendations: pr.recs,
-            },
-          }
+  return useMutation({
+    mutationFn: async (data: {
+      repoName: string
+      prNumber: number
+      title: string
+      owner: string
+      models?: string[]
+    }) => {
+      // 1. Fetch the diff from GitHub first
+      const diffResponse = await fetch(
+        `https://api.github.com/repos/${data.owner}/${data.repoName}/pulls/${data.prNumber}`,
+        {
+          headers: {
+            Authorization: `Bearer ${githubToken}`,
+            Accept: 'application/vnd.github.v3.diff',
+          },
+        }
+      )
+
+      if (!diffResponse.ok) throw new Error('Failed to fetch PR diff')
+      const diff = await diffResponse.text()
+
+      // 2. Send to our backend for analysis
+      const response = await fetch(`${API_URL}/reviewer/analyze`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
         },
-        staleTime: 1000 * 60 * 2,
+        body: JSON.stringify({
+          repoName: data.repoName,
+          prNumber: data.prNumber,
+          title: data.title,
+          diff,
+          models: data.models,
+          githubToken,
+          owner: data.owner,
+          headSha: (data as any).headSha,
+        }),
       })
+
+      if (!response.ok) throw new Error('Failed to trigger analysis')
+      return response.json()
     },
-  }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['analysis'] })
+    },
+  })
 }
 
-// Hook to refetch PRs
-export function useRefreshPRs() {
+// Hook to register a webhook
+export function useRegisterWebhook() {
+  const { data: session } = useSession()
+  const token = session?.user?.accessToken
+  const githubToken = session?.user?.githubToken
   const queryClient = useQueryClient()
 
-  return {
-    refresh: () => {
-      queryClient.invalidateQueries({ queryKey: prQueryKeys.lists() })
+  return useMutation({
+    mutationFn: async (data: { owner: string; repo: string }) => {
+      const response = await fetch(`${API_URL}/webhooks/register/${data.owner}/${data.repo}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ githubToken }),
+      })
+
+      if (!response.ok) throw new Error('Failed to register webhook')
+      return response.json()
     },
-    refreshAnalysis: (id: string | number) => {
-      queryClient.invalidateQueries({ queryKey: prQueryKeys.analysis(id) })
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['active-repos'] })
     },
-  }
+  })
+}
+
+// Hook to fetch active repos
+export function useActiveRepos() {
+  const { data: session } = useSession()
+  const token = session?.user?.accessToken
+
+  return useQuery({
+    queryKey: ['active-repos'],
+    queryFn: async (): Promise<any[]> => {
+      const response = await fetch(`${API_URL}/reviewer/active-repos`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      if (!response.ok) throw new Error('Failed to fetch active repos')
+      return response.json()
+    },
+    enabled: !!token,
+  })
+}
+
+// Hook to fetch user settings
+export function useUserSettings() {
+  const { data: session } = useSession()
+  const token = session?.user?.accessToken
+
+  return useQuery({
+    queryKey: ['user-settings'],
+    queryFn: async () => {
+      const response = await fetch(`${API_URL}/reviewer/settings`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      if (!response.ok) throw new Error('Failed to fetch settings')
+      return response.json()
+    },
+    enabled: !!token,
+  })
+}
+
+// Hook to update user settings
+export function useUpdateSettings() {
+  const { data: session } = useSession()
+  const token = session?.user?.accessToken
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (data: { selectedModels: string[] }) => {
+      const response = await fetch(`${API_URL}/reviewer/settings`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+      })
+
+      if (!response.ok) throw new Error('Failed to update settings')
+      return response.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-settings'] })
+    },
+  })
 }

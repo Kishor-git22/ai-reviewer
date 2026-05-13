@@ -20,7 +20,7 @@ export const {
         },
       },
       // Scrape only user.login and user.image as per privacy requirements
-      profile(profile) {
+      profile(profile): any {
         return {
           id: profile.id.toString(),
           name: profile.login,
@@ -64,7 +64,7 @@ export const {
 
           const data = await response.json()
           // Store backend token in the account object so it's available in the JWT callback
-          account.backendToken = data.data.accessToken
+          ;(account as any).backendToken = data.data.accessToken
           return true
         } catch (error) {
           console.error('Error syncing with backend:', error)
@@ -106,13 +106,13 @@ export const {
 // Module augmentation for NextAuth types
 declare module 'next-auth' {
   interface User {
-    id: string
-    name: string
-    email: string
-    image: string
-    login: string
-    accessToken: string
-    githubToken: string
+    id?: string
+    name?: string | null
+    email?: string | null
+    image?: string | null
+    login?: string
+    accessToken?: string
+    githubToken?: string
   }
 
   interface Session {
@@ -120,7 +120,7 @@ declare module 'next-auth' {
   }
 }
 
-declare module 'next-auth/jwt' {
+declare module '@auth/core/jwt' {
   interface JWT {
     backendToken?: string
     githubToken?: string

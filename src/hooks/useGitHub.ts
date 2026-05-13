@@ -71,6 +71,7 @@ export function useRepoPRs(owner?: string, repo?: string) {
         user: pr.user.login,
         avatar: pr.user.avatar_url,
         createdAt: pr.created_at,
+        headSha: pr.head.sha,
       }))
     },
     enabled: !!githubToken && !!owner && !!repo,

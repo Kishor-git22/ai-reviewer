@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { LayoutDashboard, Settings, LogOut, Code2, Cpu, Sparkles, ArrowLeft } from 'lucide-react'
 import { signOut, useSession } from 'next-auth/react'
+import { useUserSettings } from '@/hooks/usePrAnalysis'
 
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -42,6 +43,7 @@ export function DashboardSidebar({ children }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const { data: session } = useSession()
+  const { data: settings } = useUserSettings()
 
   const isMainDashboard = pathname === '/dashboard'
 
@@ -97,21 +99,32 @@ export function DashboardSidebar({ children }: SidebarProps) {
                 {/* Status Section */}
                 <div className="mt-4 px-2 group-data-[collapsible=icon]:hidden">
                   <div className="rounded-[1.5rem] border border-border/50 bg-accent/20 p-3">
-                    <div className="mb-2 flex items-center gap-2">
-                      <div className="h-1 w-1 animate-pulse rounded-full bg-green-500" />
-                      <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
-                        Neural Engine
-                      </span>
+                    <div className="mb-2 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="h-1 w-1 animate-pulse rounded-full bg-green-500" />
+                        <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+                          Neural Engine
+                        </span>
+                      </div>
+                      <Badge variant="outline" className="h-4 border-primary/20 bg-primary/5 px-1.5 text-[7px] font-black uppercase text-primary">
+                        Active
+                      </Badge>
                     </div>
                     <div className="space-y-2">
-                      <div className="flex items-center gap-2.5 rounded-xl bg-background/40 p-1.5">
-                        <Cpu className="h-3 w-3 text-blue-400" />
-                        <span className="text-[9px] font-bold">Llama 3.1</span>
-                      </div>
-                      <div className="flex items-center gap-2.5 rounded-xl bg-background/40 p-1.5">
-                        <Cpu className="h-3 w-3 text-purple-400" />
-                        <span className="text-[9px] font-bold">Nemotron</span>
-                      </div>
+                      {settings?.selectedModels?.map((mid: string, i: number) => {
+                        const colors = ['text-blue-400', 'text-purple-400', 'text-yellow-400'];
+                        return (
+                          <div key={mid} className="flex items-center gap-2.5 rounded-xl bg-background/40 p-1.5 transition-all hover:bg-background/60">
+                            <Cpu className={cn("h-3 w-3", colors[i % 3])} />
+                            <span className="truncate text-[9px] font-bold">
+                              {mid.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                            </span>
+                          </div>
+                        )
+                      })}
+                      {!settings?.selectedModels?.length && [1, 2, 3].map(i => (
+                        <div key={i} className="h-6 animate-pulse rounded-xl bg-background/20" />
+                      ))}
                     </div>
                   </div>
                 </div>

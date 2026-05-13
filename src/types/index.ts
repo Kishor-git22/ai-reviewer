@@ -82,6 +82,37 @@ export interface Repository {
   }
 }
 
+export interface BackendFinding {
+  id: string
+  analysisId: string
+  file: string
+  line: number
+  issue: string
+  type: FindingType
+  confidence: 'High' | 'Medium' | 'Low'
+  consensus: boolean
+  rationale: string
+  resolution: string
+  models: string[]
+}
+
+export interface Analysis {
+  id: string
+  userId: string
+  repoName: string
+  prNumber: number
+  title: string
+  status: 'pending' | 'in_progress' | 'completed' | 'failed'
+  qualityScore: number | null
+  securityScore: number | null
+  models: string[]
+  debateLog: any
+  summary: string | null
+  createdAt: string
+  updatedAt: string
+  findings: BackendFinding[]
+}
+
 export interface User {
   id: string
   login: string
