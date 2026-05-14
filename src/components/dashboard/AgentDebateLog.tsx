@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Finding, AgentReasoning } from '@/types'
 import { getVerdictColor } from '@/lib/utils'
-import { MessageSquare, CheckCircle2, XCircle, HelpCircle } from 'lucide-react'
+import { MessageSquare, CheckCircle2, XCircle, HelpCircle, Info } from 'lucide-react'
 
 interface AgentDebateLogProps {
   finding: Finding
@@ -47,9 +47,10 @@ export function AgentDebateLog({ finding, children }: AgentDebateLogProps) {
   const [open, setOpen] = useState(false)
 
   // Count verdicts
-  const positiveCount = finding.agentReasonings.filter((r) => r.verdict === 'positive').length
-  const negativeCount = finding.agentReasonings.filter((r) => r.verdict === 'negative').length
-  const neutralCount = finding.agentReasonings.filter((r) => r.verdict === 'neutral').length
+  const reasonings = finding.agentReasonings || []
+  const positiveCount = reasonings.filter((r) => r.verdict === 'positive').length
+  const negativeCount = reasonings.filter((r) => r.verdict === 'negative').length
+  const neutralCount = reasonings.filter((r) => r.verdict === 'neutral').length
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -116,7 +117,15 @@ export function AgentDebateLog({ finding, children }: AgentDebateLogProps) {
           {/* Agent Reasonings */}
           <ScrollArea className="h-[calc(100vh-280px)]">
             <div className="space-y-4 pr-4">
-              {finding.agentReasonings.map((reasoning) => (
+              {reasonings.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-10 text-center">
+                  <div className="mb-4 rounded-full bg-muted p-4 text-muted-foreground">
+                    <Info className="h-8 w-8" />
+                  </div>
+                  <p className="text-sm text-muted-foreground">No detailed agent logs available for this finding.</p>
+                </div>
+              )}
+              {reasonings.map((reasoning) => (
                 <div
                   key={reasoning.agentId}
                   className="space-y-3 rounded-lg border border-border bg-card p-4"
