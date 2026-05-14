@@ -57,11 +57,11 @@ export const NVIDIA_MODELS = [
     capability: 'General Review',
   },
   {
-    id: 'gemma-3',
-    name: 'Gemma 3',
-    provider: 'Google',
-    description: 'Focused on safety and ethical coding standards.',
-    capability: 'Compliance',
+    id: 'gemma-2-27b',
+    name: 'Llama 3.3',
+    provider: 'Meta',
+    description: 'The latest and most advanced Llama model for high-fidelity code review.',
+    capability: 'Advanced Review',
   },
   {
     id: 'phi-4',
