@@ -78,6 +78,7 @@ model Finding {
   rationale   String
   resolution  String
   models      String[] // Which models agreed on this finding
+  reference   String?
 
   analysis    Analysis @relation(fields: [analysisId], references: [id])
 

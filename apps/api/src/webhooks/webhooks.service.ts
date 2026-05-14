@@ -118,33 +118,47 @@ export class WebhooksService {
     }
 
     // 2. Fetch the diff from GitHub
-    // Note: We need a valid token. We'll use the user's last known token 
-    // In a real app, you'd store the refresh token or use a GitHub App token.
-    // For this demo, we'll assume we have a way to get the user's token.
     const githubToken = await this.getUserGithubToken(repoRecord.userId);
 
-    const octokit = new Octokit({ auth: githubToken });
-    const { data: diff } = await octokit.rest.pulls.get({
-      owner: repo.owner.login,
-      repo: repo.name,
-      pull_number: pr.number,
-      headers: {
-        accept: 'application/vnd.github.v3.diff',
-      },
+    // Return immediately to satisfy GitHub's 10s timeout
+    // and run the analysis in the background
+    this.processBackgroundAnalysis(repo, pr, repoRecord, githubToken).catch(err => {
+      this.logger.error(`Background analysis failed: ${err.message}`);
     });
 
-    // 3. Trigger the analysis debate
-    await this.reviewerService.performDebateReview(
-      repoRecord.userId,
-      repo.name,
-      pr.number,
-      pr.title,
-      diff as any,
-      githubToken,
-      repo.owner.login,
-      pr.head.sha,
-      repoRecord.user.selectedModels || undefined,
-    );
+    return { status: 'processing' };
+  }
+
+  /**
+   * Run analysis in the background to avoid blocking webhooks
+   */
+  private async processBackgroundAnalysis(repo: any, pr: any, repoRecord: any, githubToken: string) {
+    try {
+      const octokit = new Octokit({ auth: githubToken });
+      const { data: diff } = await octokit.rest.pulls.get({
+        owner: repo.owner.login,
+        repo: repo.name,
+        pull_number: pr.number,
+        headers: {
+          accept: 'application/vnd.github.v3.diff',
+        },
+      });
+
+      // 3. Trigger the analysis debate
+      await this.reviewerService.performDebateReview(
+        repoRecord.userId,
+        repo.name,
+        pr.number,
+        pr.title,
+        diff as any,
+        githubToken,
+        repo.owner.login,
+        pr.head.sha,
+        repoRecord.user.selectedModels || undefined,
+      );
+    } catch (error) {
+      this.logger.error(`Automatic analysis failed for ${repo.full_name} PR #${pr.number}: ${error.message}`);
+    }
   }
 
   /**

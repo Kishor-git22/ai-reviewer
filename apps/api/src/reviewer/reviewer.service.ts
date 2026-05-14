@@ -13,6 +13,7 @@ export interface AIReviewResult {
     confidence: 'High' | 'Medium' | 'Low';
     rationale: string;
     resolution: string;
+    reference: string;
   }>;
   qualityScore: number;
   securityScore: number;
@@ -70,6 +71,7 @@ export class ReviewerService {
     return new OpenAI({
       baseURL: 'https://integrate.api.nvidia.com/v1',
       apiKey,
+      timeout: 900000, // 15 minutes
     });
   }
 
@@ -91,7 +93,32 @@ export class ReviewerService {
       'mistral-medium-3.5',
     ],
   ) {
+    // 0. Check if an analysis is already in progress for this PR
+    const existingAnalysis = await this.prisma.analysis.findFirst({
+      where: {
+        repoName,
+        prNumber,
+        status: 'in_progress',
+      },
+    });
+
+    if (existingAnalysis) {
+      this.logger.log(`Analysis for ${repoName} PR #${prNumber} already in progress. Mark as cancelled and starting fresh.`);
+      await this.prisma.analysis.update({
+        where: { id: existingAnalysis.id },
+        data: { status: 'failed' }
+      });
+    }
+
     this.logger.log(`Starting debate review for ${repoName} PR #${prNumber} with models: ${selectedModels.join(', ')}`);
+    this.logger.log(`Diff size: ${diff.length} characters`);
+
+    // Truncate diff if it's too large to prevent 504 timeouts
+    let processedDiff = diff;
+    if (diff.length > 40000) {
+      this.logger.warn(`Diff too large (${diff.length} chars). Truncating to 40,000 chars.`);
+      processedDiff = diff.substring(0, 40000) + '\n\n... [Diff truncated due to size] ...';
+    }
 
     // 1. Create initial analysis record
     const analysis = await this.prisma.analysis.create({
@@ -106,29 +133,69 @@ export class ReviewerService {
     });
 
     try {
-      // 2. Run analysis in parallel across 3 agents
-      const agentPrompts = selectedModels.map((model) => 
-        this.getAgentReview(model, diff)
+      // Set initial progress
+      await this.githubService.updateCommitStatus(
+        githubToken,
+        owner,
+        repoName,
+        headSha,
+        'pending',
+        'AI Agents are analyzing the code... 15%',
       );
 
-      const agentResponses = await Promise.all(agentPrompts);
+      // 2. Run analysis across 3 agents with independent error handling
+      const agentResults = await Promise.all(
+        selectedModels.map(async (model) => {
+          try {
+            const response = await this.getAgentReview(model, processedDiff);
+            return { model, status: 'success', response };
+          } catch (e: any) {
+            this.logger.error(`Agent review for ${model} failed: ${e.message}`);
+            return { model, status: 'failed', error: e.message };
+          }
+        })
+      );
 
-      // 3. Perform Consensus synthesis (Agent Debate)
-      // We use the most powerful model (usually the first one or Llama 3.1 405B) to synthesize the results
-      const synthesis = await this.synthesizeConsensus(selectedModels[0], agentResponses, diff);
+      const successfulResponses = agentResults
+        .filter(r => r.status === 'success')
+        .map(r => r.response);
+
+      if (successfulResponses.length === 0) {
+        throw new Error('All AI agents failed to respond. Please check your API keys or try again later.');
+      }
+
+      await this.githubService.updateCommitStatus(
+        githubToken,
+        owner,
+        repoName,
+        headSha,
+        'pending',
+        `Agents are debating consensus (${successfulResponses.length}/3)... 65%`,
+      );
+
+      // 3. Perform Consensus synthesis (Agent Debate) using the first successful model as lead
+      const leadModel = agentResults.find(r => r.status === 'success')?.model || selectedModels[0];
+      const synthesis = await this.synthesizeConsensus(leadModel, successfulResponses, processedDiff);
+
+      await this.githubService.updateCommitStatus(
+        githubToken,
+        owner,
+        repoName,
+        headSha,
+        'pending',
+        'Finalizing the review report... 90%',
+      );
 
       // 4. Store findings and update analysis
       await this.prisma.$transaction([
-        ...synthesis.findings.map((f) => 
-          this.prisma.finding.create({
-            data: {
-              analysisId: analysis.id,
-              ...f,
-              consensus: true, // In this simplified version, synthesized findings are consensus
-              models: selectedModels, // For now, we attribute to all
-            },
-          })
-        ),
+        this.prisma.finding.createMany({
+          data: synthesis.findings.map((f) => ({
+            analysisId: analysis.id,
+            ...f,
+            consensus: true,
+            models: selectedModels,
+          })),
+        }),
         this.prisma.analysis.update({
           where: { id: analysis.id },
           data: {
@@ -136,7 +203,7 @@ export class ReviewerService {
             qualityScore: synthesis.qualityScore,
             securityScore: synthesis.securityScore,
             summary: synthesis.summary,
-            debateLog: { agents: agentResponses } as any,
+            debateLog: { agents: agentResults } as any,
           },
         }),
       ]);
@@ -148,24 +215,38 @@ export class ReviewerService {
         repoName,
         prNumber,
         synthesis.findings,
+        headSha,
       );
 
-      // 6. Update Check Run
-      await this.githubService.createCheckRun(
+      // 6. Update Status to Success
+      await this.githubService.updateCommitStatus(
         githubToken,
         owner,
         repoName,
         headSha,
-        analysis.id,
+        'success',
+        'AI Analysis Complete! 100% Done.',
       );
 
       return analysis.id;
     } catch (error) {
       this.logger.error(`Analysis failed for PR #${prNumber}: ${error.message}`);
+      
       await this.prisma.analysis.update({
         where: { id: analysis.id },
-        data: { status: 'failed', summary: error.message },
+        data: { status: 'failed' },
       });
+
+      // Update GitHub with error status
+      await this.githubService.updateCommitStatus(
+        githubToken,
+        owner,
+        repoName,
+        headSha,
+        'error',
+        `Analysis failed: ${error.message.substring(0, 50)}...`,
+      );
+
       throw error;
     }
   }
@@ -193,28 +274,55 @@ Focus on:
 CODE DIFF:
 ${safeDiff}
 
+IMPORTANT: Your response must be STABLE, VALID JSON.
+1. Use double quotes for all keys and strings.
+2. ESCAPE all backslashes as \\\\ and double quotes as \\\".
+3. Do NOT use literal newlines inside strings.
+4. DO NOT use markdown tables, bullet points, or any other formatting.
+5. Output ONLY the raw JSON object. Do not include any preamble, postamble, or explanation.
+6. The response MUST start with { and end with }.
+
 Return your response in strict JSON format:
 {
   "findings": [
-    { "file": "string", "line": number, "issue": "string", "type": "Critical|Vulnerability|Warning|Info", "confidence": "High|Medium|Low", "rationale": "string", "resolution": "string" }
+    { "file": "string", "line": number, "issue": "string", "type": "Critical|Vulnerability|Warning|Info", "confidence": "High|Medium|Low", "rationale": "string", "resolution": "string", "reference": "URL (OWASP, CWE, or documentation link)" }
   ],
   "qualityScore": number (0-100),
   "securityScore": number (0-100),
   "summary": "string"
 }`;
 
-    const completion = await client.chat.completions.create({
-      model,
-      messages: [{ role: 'user', content: prompt }],
-    });
+    let completion;
+    let retries = 2;
+    
+    while (retries >= 0) {
+      try {
+        completion = await client.chat.completions.create({
+          model,
+          messages: [
+            { role: 'system', content: 'You are a strict JSON generator. You MUST output ONLY raw JSON. No preamble, no postamble, no code blocks, no explanation. Your entire response must be a single JSON object. Double-escape all backslashes and escape all internal double quotes.' },
+            { role: 'user', content: prompt }
+          ],
+          max_tokens: 4096,
+        });
+        break;
+      } catch (error: any) {
+        if (error.status === 504 && retries > 0) {
+          this.logger.warn(`Agent review for ${modelId} failed with 504, retrying... (${retries} left)`);
+          retries--;
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          continue;
+        }
+        throw error;
+      }
+    }
 
     const content = completion.choices[0].message.content || '{}';
-    // Strip markdown code blocks if the model wrapped the JSON
-    const cleanContent = content.replace(/```json/g, '').replace(/```/g, '').trim();
+    const cleanContent = this.extractJsonBlock(content);
 
     return {
       model: modelId,
-      content: JSON.parse(cleanContent),
+      content: this.safeJsonParse(cleanContent),
     };
   }
 
@@ -242,23 +350,174 @@ Instructions:
 2. Deduplicate similar findings.
 3. Calculate the final Quality and Security scores.
 4. Provide a high-level summary of the "Debate" and final verdict.
+5. IMPORTANT: Output ONLY the JSON object. Do not include any text before or after.
+6. IMPORTANT: Ensure the JSON is valid. Escape all backslashes as \\\\ and double quotes as \\\".
+7. IMPORTANT: Do not include literal newlines inside JSON strings.
 
 Return your response in strict JSON format:
 {
-  "findings": [...],
+  "findings": [
+    { "file": "string", "line": number, "issue": "string", "type": "Critical|Vulnerability|Warning|Info", "confidence": "High|Medium|Low", "rationale": "string", "resolution": "string", "reference": "URL" }
+  ],
   "qualityScore": number,
   "securityScore": number,
   "summary": "string"
 }`;
 
-    const completion = await client.chat.completions.create({
-      model,
-      messages: [{ role: 'user', content: prompt }],
-    });
+    let completion;
+    let retries = 2;
+    
+    while (retries >= 0) {
+      try {
+        completion = await client.chat.completions.create({
+          model,
+          messages: [
+            { role: 'system', content: 'You are a strict JSON generator. You MUST output ONLY raw JSON. No preamble, no postamble, no code blocks, no explanation. Your entire response must be a single JSON object. Double-escape all backslashes and escape all internal double quotes.' },
+            { role: 'user', content: prompt }
+          ],
+          max_tokens: 4096,
+        });
+        break;
+      } catch (error) {
+        if (error.status === 504 && retries > 0) {
+          this.logger.warn(`Synthesis failed with 504, retrying... (${retries} left)`);
+          retries--;
+          await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5s
+          continue;
+        }
+        throw error;
+      }
+    }
 
     const content = completion.choices[0].message.content || '{}';
-    const cleanContent = content.replace(/```json/g, '').replace(/```/g, '').trim();
+    const cleanContent = this.extractJsonBlock(content);
 
-    return JSON.parse(cleanContent) as AIReviewResult;
+    return this.safeJsonParse(cleanContent);
+  }
+
+  /**
+   * Extracts the most likely JSON block from a string containing conversational text or code
+   */
+  private extractJsonBlock(content: string): string {
+    // 1. First try to find a block between ```json and ```
+    const codeBlockMatch = content.match(/```json\s*([\s\S]*?)\s*```/);
+    if (codeBlockMatch && codeBlockMatch[1]) {
+      return codeBlockMatch[1].trim();
+    }
+
+    // 2. Otherwise look for the block that contains our expected keys
+    const markerRegex = /["']?(findings|qualityScore|summary)["']?\s*:/;
+    const match = content.match(markerRegex);
+    
+    if (match && match.index !== undefined) {
+      // Find the { that starts the object containing this marker
+      const potentialStart = content.lastIndexOf('{', match.index);
+      if (potentialStart !== -1) {
+        // Find the matching } by looking for the last one in the file
+        const lastEnd = content.lastIndexOf('}');
+        if (lastEnd > potentialStart) {
+          return content.substring(potentialStart, lastEnd + 1);
+        }
+      }
+    }
+
+    // Fallback: Just try to find the largest block between { and }
+    const firstStart = content.indexOf('{');
+    const lastEnd = content.lastIndexOf('}');
+    if (firstStart !== -1 && lastEnd !== -1 && lastEnd > firstStart) {
+      return content.substring(firstStart, lastEnd + 1);
+    }
+
+    return content;
+  }
+
+  /**
+   * Safe JSON parser that attempts to fix common LLM mistakes
+   */
+  private safeJsonParse(content: string): any {
+    try {
+      return JSON.parse(content);
+    } catch (e) {
+      this.logger.warn(`JSON parse failed, attempting recovery...`);
+      this.logger.debug(`Malformed JSON snippet: ${content.substring(0, 100)}...`);
+      
+      let fixed = content.trim();
+      
+      // 1. Remove non-printable control characters
+      fixed = fixed.replace(/[\x00-\x1F\x7F-\x9F]/g, (char) => {
+        if (char === '\n' || char === '\r' || char === '\t') return char;
+        return '';
+      });
+
+      // 2. Remove markdown code blocks
+      fixed = fixed.replace(/^```json\s*/, '').replace(/```$/, '');
+
+      // 3. Fix unescaped quotes inside string values
+      // This looks for "key": "value "with" quotes"
+      // We look for quotes that are NOT followed by , } ] or : and are NOT preceded by \
+      fixed = fixed.replace(/:(?:\s*)"(.*?)",?(\s*[}\]])/gs, (match, p1, p2) => {
+        const sanitized = p1.replace(/(?<!\\)"/g, '\\"');
+        return `: "${sanitized}"${p2}`;
+      });
+
+      // 4. Handle unquoted or single-quoted keys/values
+      fixed = fixed.replace(/'([^']+)':/g, '"$1":');
+      fixed = fixed.replace(/:\s*'([^']*)'/g, ': "$1"');
+      fixed = fixed.replace(/([{,]\s*)([a-zA-Z0-9_]+)\s*:/g, '$1"$2":');
+
+      // 5. Fix common backslash errors
+      fixed = fixed.replace(/\\(?![nr"t\\\/])/g, '\\\\');
+
+      // 6. Handle literal newlines
+      fixed = fixed.replace(/(".*?")/gs, (match) => {
+        return match.replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+      });
+
+      // 7. Clean up commas
+      // 7. Clean up commas
+      fixed = fixed.replace(/,(\s*[\]}])/g, '$1');
+      fixed = fixed.replace(/\}\s*\{/g, '},{');
+      fixed = fixed.replace(/\]\s*\{/g, '],{');
+      fixed = fixed.replace(/"\s*"/g, '","'); 
+
+      // 8. Fix premature object closure: }, "findings": -> , "findings":
+      fixed = fixed.replace(/\}\s*,\s*"(findings|qualityScore|securityScore|summary)"\s*:/g, ', "$1":');
+
+      // 8. JSON Balancer: Auto-close truncated objects/arrays
+      let braceCount = 0;
+      let bracketCount = 0;
+      let inString = false;
+      for (let i = 0; i < fixed.length; i++) {
+        if (fixed[i] === '"' && fixed[i-1] !== '\\') inString = !inString;
+        if (!inString) {
+          if (fixed[i] === '{') braceCount++;
+          if (fixed[i] === '}') braceCount--;
+          if (fixed[i] === '[') bracketCount++;
+          if (fixed[i] === ']') bracketCount--;
+        }
+      }
+      
+      while (bracketCount > 0) { fixed += ']'; bracketCount--; }
+      while (braceCount > 0) { fixed += '}'; braceCount--; }
+
+      try {
+        return JSON.parse(fixed);
+      } catch (e2) {
+        this.logger.error(`JSON recovery failed: ${e2.message}`);
+        this.logger.debug(`Attempted fix: ${fixed}`);
+        
+        // Final fallback: Regex extraction for critical fields
+        const qualityMatch = content.match(/"qualityScore":\s*(\d+)/);
+        const securityMatch = content.match(/"securityScore":\s*(\d+)/);
+        const summaryMatch = content.match(/"summary":\s*"([^"]+)"/);
+        
+        return {
+          findings: [],
+          qualityScore: qualityMatch ? parseInt(qualityMatch[1], 10) : 0,
+          securityScore: securityMatch ? parseInt(securityMatch[1], 10) : 0,
+          summary: summaryMatch ? summaryMatch[1] : 'Critical: AI generated invalid JSON. Please check logs.'
+        };
+      }
+    }
   }
 }

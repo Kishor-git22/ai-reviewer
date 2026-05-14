@@ -17,6 +17,7 @@ export class GithubService {
     repo: string,
     prNumber: number,
     findings: any[],
+    headSha: string,
   ) {
     const octokit = new Octokit({ auth: githubToken });
     const frontendUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
@@ -29,10 +30,12 @@ export class GithubService {
           owner,
           repo,
           pull_number: prNumber,
+          commit_id: headSha,
           body: `### AI Finding: ${finding.type}\n**Issue:** ${finding.issue}\n\n**Rationale:** ${finding.rationale}\n\n**Suggested Resolution:**\n\`\`\`\n${finding.resolution}\n\`\`\``,
           path: finding.file,
           line: finding.line,
           side: 'RIGHT',
+          subject_type: 'line',
         });
       } catch (error) {
         this.logger.warn(`Failed to post comment for ${finding.file}:${finding.line}: ${error.message}`);
@@ -49,34 +52,31 @@ export class GithubService {
   }
 
   /**
-   * Create a GitHub Check Run
+   * Update GitHub Commit Status with progress
    */
-  async createCheckRun(
+  async updateCommitStatus(
     githubToken: string,
     owner: string,
     repo: string,
     headSha: string,
-    analysisId: string,
+    state: 'pending' | 'success' | 'failure' | 'error',
+    description: string,
   ) {
     const octokit = new Octokit({ auth: githubToken });
     const frontendUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
 
     try {
-      await octokit.rest.checks.create({
+      await octokit.rest.repos.createCommitStatus({
         owner,
         repo,
-        name: 'AI Code Review (NVIDIA NIM)',
-        head_sha: headSha,
-        status: 'completed',
-        conclusion: 'success',
-        details_url: `${frontendUrl}/dashboard`,
-        output: {
-          title: 'AI Analysis Complete',
-          summary: 'The multi-agent AI debate has concluded. Click "More information" to see the full findings and rationale.',
-        },
+        sha: headSha,
+        state,
+        context: 'AI Code Review (NVIDIA NIM)',
+        description,
+        target_url: `${frontendUrl}/dashboard`,
       });
     } catch (error) {
-      this.logger.error(`Failed to create check run: ${error.message}`);
+      this.logger.error(`Failed to update commit status: ${error.message}`);
     }
   }
 }

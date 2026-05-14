@@ -20,11 +20,17 @@ async function bootstrap() {
 
   // Enable CORS for frontend
   app.enableCors({
-    origin: process.env.NODE_ENV === 'production' 
-      ? ['https://prism.dev', 'https://www.prism.dev']
-      : ['http://localhost:3000', 'http://127.0.0.1:3000'],
+    origin: [
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'http://localhost:3001',
+      'http://127.0.0.1:3001',
+    ],
     credentials: true,
   })
+
+  // Enable clean shutdown on process signals
+  app.enableShutdownHooks();
 
   await app.listen(port)
   console.log(`🚀 AI Reviewer API is running on: http://localhost:${port}`)
