@@ -91,8 +91,8 @@ export class ReviewerService {
     headSha: string,
     selectedModels: string[] = [
       'llama-3.1',
-      'deepseek-v4-pro',
-      'mistral-medium-3.5',
+      'deepseek-v4-flash',
+      'mistral-small-4',
     ],
   ) {
     // 0. Check if an analysis is already in progress for this PR
@@ -329,10 +329,11 @@ Return your response in strict JSON format:
         completion = await client.chat.completions.create({
           model,
           messages: [
-            { role: 'system', content: 'You are a strict JSON generator. You MUST output ONLY raw JSON. No preamble, no postamble, no code blocks, no explanation. Your entire response must be a single JSON object. Double-escape all backslashes and escape all internal double quotes.' },
+            { role: 'system', content: 'You are a Senior Engineer. Output ONLY valid JSON. Be extremely concise. No preamble. No postamble. No explanation. Your entire response must be a single JSON object.' },
             { role: 'user', content: prompt }
           ],
-          max_tokens: 4096,
+          max_tokens: 3000,
+          temperature: 0.1,
         });
         break;
       } catch (error: any) {
@@ -401,10 +402,11 @@ Return your response in strict JSON format:
         completion = await client.chat.completions.create({
           model,
           messages: [
-            { role: 'system', content: 'You are a strict JSON generator. You MUST output ONLY raw JSON. No preamble, no postamble, no code blocks, no explanation. Your entire response must be a single JSON object. Double-escape all backslashes and escape all internal double quotes.' },
+            { role: 'system', content: 'You are a Lead Architect. Synthesize agent findings into a single JSON object. Be extremely concise. No preamble. No postamble.' },
             { role: 'user', content: prompt }
           ],
-          max_tokens: 4096,
+          max_tokens: 3000,
+          temperature: 0.1,
         });
         break;
       } catch (error) {
