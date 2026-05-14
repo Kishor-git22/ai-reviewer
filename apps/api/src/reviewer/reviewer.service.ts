@@ -329,7 +329,7 @@ Return your response in strict JSON format:
         completion = await client.chat.completions.create({
           model,
           messages: [
-            { role: 'system', content: 'You are a Senior Engineer. Output ONLY valid JSON. Be extremely concise. No preamble. No postamble. No explanation. Your entire response must be a single JSON object.' },
+            { role: 'system', content: 'You are a Senior Engineer. Output ONLY valid JSON. No markdown, no code blocks, no explanation. IMPORTANT: Escape all backslashes as \\\\ and ensure all newlines inside strings are escaped as \\n. The response MUST be a single parseable JSON object.' },
             { role: 'user', content: prompt }
           ],
           max_tokens: 3000,
@@ -513,6 +513,19 @@ Return your response in strict JSON format:
 
       // 8. Fix premature object closure: }, "findings": -> , "findings":
       fixed = fixed.replace(/\}\s*,\s*"(findings|qualityScore|securityScore|summary)"\s*:/g, ', "$1":');
+
+      // 9. Fix literal newlines inside strings (very common failure)
+      // This regex looks for content between quotes and replaces actual newlines with \n
+      fixed = fixed.replace(/"([^"\\]*(\\.[^"\\]*)*)"/g, (match) => {
+        return match.replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+      });
+
+      // 10. Fix backslashes escaping the closing quote: \" -> \\"
+      // Often models do "file\": \"name.ts\" which breaks the string
+      fixed = fixed.replace(/\\"/g, '\\\\"').replace(/\\\\\\\\"/g, '\\\\"'); // Normalize to \\"
+      fixed = fixed.replace(/([^\\@])\\"/g, '$1\\\\"'); // Ensure quote is escaped with double backslash if not already
+
+      // 11. Discard trailing "babble" (text after the last root brace)
 
       // 9. Discard trailing "babble" (text after the last root brace)
       const rootOpenIndex = fixed.indexOf('{');
