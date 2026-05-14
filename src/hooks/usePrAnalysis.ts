@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { PullRequest, PRAnalysis, Finding, Analysis } from '@/types'
 import { useSession } from 'next-auth/react'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
 
 // Hook to fetch analysis from backend
 export function useAnalysis(id: string | null) {

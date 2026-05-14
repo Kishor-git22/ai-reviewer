@@ -94,6 +94,7 @@ export interface BackendFinding {
   rationale: string
   resolution: string
   models: string[]
+  reference?: string
 }
 
 export interface Analysis {

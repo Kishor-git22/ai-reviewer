@@ -129,9 +129,9 @@ function FindingCard({ finding }: { finding: BackendFinding }) {
           </div>
 
           <div className="flex items-center gap-2">
-            {(finding as any).reference && (
+            {finding.reference && (
               <a
-                href={(finding as any).reference}
+                href={finding.reference}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-4 py-1.5 text-[10px] font-black uppercase tracking-widest text-primary transition-all hover:bg-primary/20"
@@ -222,6 +222,54 @@ export function AnalysisView({ pr, analysis, onBack }: AnalysisViewProps) {
             </div>
           </CardContent>
         </Card>
+
+        {/* Agent Status Section */}
+        {analysis.debateLog?.agents && (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {analysis.debateLog.agents.map((agent: any) => (
+              <Card key={agent.model} className={cn(
+                "border-border/50 bg-accent/10 transition-all",
+                agent.status === 'failed' ? "border-red-500/30 bg-red-500/5" : "border-green-500/30 bg-green-500/5"
+              )}>
+                <CardContent className="flex items-center gap-3 p-3">
+                  <div className={cn(
+                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg shadow-inner",
+                    agent.status === 'failed' ? "bg-red-500/20" : "bg-green-500/20"
+                  )}>
+                    {agent.status === 'failed' ? (
+                      <AlertCircle className="h-4 w-4 text-red-400" />
+                    ) : (
+                      <CheckCircle2 className="h-4 w-4 text-green-400" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[10px] font-black uppercase tracking-tight text-muted-foreground truncate">
+                      {agent.model}
+                    </div>
+                    <div className={cn(
+                      "text-xs font-bold",
+                      agent.status === 'failed' ? "text-red-400" : "text-green-400"
+                    )}>
+                      {agent.status === 'failed' ? 'Model Error' : 'Active'}
+                    </div>
+                  </div>
+                  {agent.status === 'failed' && agent.error && (
+                    <Badge variant="outline" className="border-red-500/20 bg-red-500/10 text-[9px] text-red-400">
+                      504
+                    </Badge>
+                  )}
+                </CardContent>
+                {agent.status === 'failed' && agent.error && (
+                  <div className="border-t border-red-500/10 px-3 py-2">
+                    <p className="text-[10px] font-medium text-red-400/80 line-clamp-1">
+                      {agent.error}
+                    </p>
+                  </div>
+                )}
+              </Card>
+            ))}
+          </div>
+        )}
 
         {/* Confirmed Findings Section */}
         {confirmedFindings.length > 0 && (
