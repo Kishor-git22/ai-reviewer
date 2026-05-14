@@ -36,7 +36,8 @@ export class ReviewerService {
       'minimax-m2.7': 'MINIMAX_KEY',
       'nemotron-3-super': 'NEMOTRON_SUPER_KEY',
       'llama-3.1': 'LLAMA_31_KEY',
-      'gemma-3': 'GEMMA_3_KEY',
+      'gemma-2-27b': 'GEMMA_3_KEY',
+      'gemma-3': 'GEMMA_3_KEY', // Alias for backward compatibility
       'phi-4': 'PHI_4_KEY',
     };
 
@@ -53,7 +54,8 @@ export class ReviewerService {
     'minimax-m2.7': 'minimaxai/minimax-m2.7',
     'nemotron-3-super': 'nvidia/nemotron-3-super-120b-a12b',
     'llama-3.1': 'meta/llama-3.1-70b-instruct',
-    'gemma-3': 'google/gemma-3-27b-it',
+    'gemma-2-27b': 'meta/llama-3.3-70b-instruct',
+    'gemma-3': 'meta/llama-3.3-70b-instruct', // Alias
     'phi-4': 'microsoft/phi-4-mini-instruct',
   };
 
@@ -208,15 +210,42 @@ export class ReviewerService {
         }),
       ]);
 
-      // 5. Post comments back to GitHub
-      await this.githubService.postComments(
-        githubToken,
-        owner,
-        repoName,
-        prNumber,
-        synthesis.findings,
-        headSha,
+      // 5. Extract valid paths from diff to prevent GitHub 422 errors
+      const validPaths = new Set(
+        Array.from(processedDiff.matchAll(/^(?:\+\+\+|---) [ab]\/(.*?)(?:[ \t].*)?$/gm))
+          .map(m => m[1].trim())
       );
+      
+      const filterFindings = synthesis.findings.filter(f => validPaths.has(f.file));
+      
+      if (filterFindings.length < synthesis.findings.length) {
+        this.logger.warn(`Filtered out ${synthesis.findings.length - filterFindings.length} findings with invalid paths. Valid paths: ${Array.from(validPaths).join(', ')}`);
+      }
+
+      // 6. Post comments back to GitHub
+      if (filterFindings.length > 0) {
+        await this.githubService.postComments(
+          githubToken,
+          owner,
+          repoName,
+          prNumber,
+          filterFindings,
+          headSha,
+        );
+      } else {
+        this.logger.log('No valid findings to post after path filtering.');
+        // Still post the summary comment via a separate call if needed, 
+        // but postComments already handles summary. Let's make sure summary is posted.
+        await this.githubService.postSummaryOnly(
+          githubToken,
+          owner,
+          repoName,
+          prNumber,
+          synthesis.findings.length,
+          synthesis.qualityScore,
+          synthesis.securityScore
+        );
+      }
 
       // 6. Update Status to Success
       await this.githubService.updateCommitStatus(
@@ -482,6 +511,24 @@ Return your response in strict JSON format:
 
       // 8. Fix premature object closure: }, "findings": -> , "findings":
       fixed = fixed.replace(/\}\s*,\s*"(findings|qualityScore|securityScore|summary)"\s*:/g, ', "$1":');
+
+      // 9. Discard trailing "babble" (text after the last root brace)
+      const rootOpenIndex = fixed.indexOf('{');
+      if (rootOpenIndex !== -1) {
+        let depth = 0;
+        let lastMatch = -1;
+        for (let i = rootOpenIndex; i < fixed.length; i++) {
+          if (fixed[i] === '{') depth++;
+          if (fixed[i] === '}') depth--;
+          if (depth === 0) {
+            lastMatch = i;
+            break;
+          }
+        }
+        if (lastMatch !== -1) {
+          fixed = fixed.substring(0, lastMatch + 1);
+        }
+      }
 
       // 8. JSON Balancer: Auto-close truncated objects/arrays
       let braceCount = 0;
