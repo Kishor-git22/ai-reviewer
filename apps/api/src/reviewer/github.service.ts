@@ -34,7 +34,7 @@ export class GithubService {
         comments: findings.map((finding) => ({
           path: finding.file,
           line: finding.line,
-          body: `### AI Finding: ${finding.type}\n**Issue:** ${finding.issue}\n\n**Rationale:** ${finding.rationale}\n\n**Suggested Resolution:**\n\`\`\`\n${finding.resolution}\n\`\`\``,
+            body: `### AI Finding: ${finding.type}\n**Issue:** ${finding.issue}\n\n**Rationale:** ${finding.rationale}\n\n**Suggested Resolution:**\n\`\`\`\n${finding.resolution}\n\`\`\`\n\n---\n*Detected in commit ${headSha.substring(0, 7)} at ${new Date().toLocaleString()}*`,
         })),
       });
     } catch (error: any) {
@@ -49,7 +49,7 @@ export class GithubService {
             repo,
             pull_number: prNumber,
             commit_id: headSha,
-            body: `### AI Finding: ${finding.type}\n**Issue:** ${finding.issue}\n\n**Rationale:** ${finding.rationale}\n\n**Suggested Resolution:**\n\`\`\`\n${finding.resolution}\n\`\`\``,
+            body: `### AI Finding: ${finding.type}\n**Issue:** ${finding.issue}\n\n**Rationale:** ${finding.rationale}\n\n**Suggested Resolution:**\n\`\`\`\n${finding.resolution}\n\`\`\`\n\n---\n*Detected in commit ${headSha.substring(0, 7)} at ${new Date().toLocaleString()}*`,
             path: finding.file,
             line: finding.line,
           });
