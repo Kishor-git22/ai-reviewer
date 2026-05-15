@@ -63,6 +63,19 @@ export class ReviewerController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Get('repo/:repoName/pr/:prNumber/history')
+  async getPrAnalysisHistory(
+    @Param('repoName') repoName: string,
+    @Param('prNumber') prNumber: string,
+  ) {
+    return this.prisma.analysis.findMany({
+      where: { repoName, prNumber: parseInt(prNumber, 10) },
+      orderBy: { createdAt: 'desc' },
+      include: { findings: true },
+    });
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get('settings')
   async getSettings(@Request() req) {
     const user = await this.prisma.user.findUnique({
