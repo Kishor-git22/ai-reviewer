@@ -79,6 +79,8 @@ model Finding {
   resolution  String
   models      String[] // Which models agreed on this finding
   reference   String?
+  commitSha   String?  @map("commit_sha")
+  createdAt   DateTime @default(now()) @map("created_at")
 
   analysis    Analysis @relation(fields: [analysisId], references: [id])
 
