@@ -122,7 +122,7 @@ export class WebhooksService {
 
     // Return immediately to satisfy GitHub's 10s timeout
     // and run the analysis in the background
-    this.processBackgroundAnalysis(repo, pr, repoRecord, githubToken).catch(err => {
+    this.processBackgroundAnalysis(repo, pr, repoRecord, githubToken, event, payload).catch(err => {
       this.logger.error(`Background analysis failed: ${err.message}`);
     });
 
@@ -132,17 +132,34 @@ export class WebhooksService {
   /**
    * Run analysis in the background to avoid blocking webhooks
    */
-  private async processBackgroundAnalysis(repo: any, pr: any, repoRecord: any, githubToken: string) {
+  private async processBackgroundAnalysis(repo: any, pr: any, repoRecord: any, githubToken: string, event: string, payload: any) {
     try {
       const octokit = new Octokit({ auth: githubToken });
-      const { data: diff } = await octokit.rest.pulls.get({
-        owner: repo.owner.login,
-        repo: repo.name,
-        pull_number: pr.number,
-        headers: {
-          accept: 'application/vnd.github.v3.diff',
-        },
-      });
+      let diff = '';
+
+      if (event === 'synchronize' && payload.before && payload.after) {
+        this.logger.log(`Fetching incremental diff between ${payload.before} and ${payload.after}`);
+        const { data: comparison } = await octokit.rest.repos.compareCommits({
+          owner: repo.owner.login,
+          repo: repo.name,
+          base: payload.before,
+          head: payload.after,
+          headers: {
+            accept: 'application/vnd.github.v3.diff',
+          },
+        });
+        diff = comparison as any;
+      } else {
+        const { data: fullDiff } = await octokit.rest.pulls.get({
+          owner: repo.owner.login,
+          repo: repo.name,
+          pull_number: pr.number,
+          headers: {
+            accept: 'application/vnd.github.v3.diff',
+          },
+        });
+        diff = fullDiff as any;
+      }
 
       // 3. Trigger the analysis debate
       await this.reviewerService.performDebateReview(
@@ -150,7 +167,7 @@ export class WebhooksService {
         repo.name,
         pr.number,
         pr.title,
-        diff as any,
+        diff,
         githubToken,
         repo.owner.login,
         pr.head.sha,

@@ -36,7 +36,8 @@ export class ReviewerService {
       'minimax-m2.7': 'MINIMAX_KEY',
       'nemotron-3-super': 'NEMOTRON_SUPER_KEY',
       'llama-3.1': 'LLAMA_31_KEY',
-      'gemma-3': 'GEMMA_3_KEY',
+      'gemma-2-27b': 'GEMMA_3_KEY',
+      'gemma-3': 'GEMMA_3_KEY', // Alias for backward compatibility
       'phi-4': 'PHI_4_KEY',
     };
 
@@ -53,7 +54,8 @@ export class ReviewerService {
     'minimax-m2.7': 'minimaxai/minimax-m2.7',
     'nemotron-3-super': 'nvidia/nemotron-3-super-120b-a12b',
     'llama-3.1': 'meta/llama-3.1-70b-instruct',
-    'gemma-3': 'google/gemma-3-27b-it',
+    'gemma-2-27b': 'meta/llama-3.3-70b-instruct',
+    'gemma-3': 'meta/llama-3.3-70b-instruct', // Alias
     'phi-4': 'microsoft/phi-4-mini-instruct',
   };
 
@@ -89,8 +91,8 @@ export class ReviewerService {
     headSha: string,
     selectedModels: string[] = [
       'llama-3.1',
-      'deepseek-v4-pro',
-      'mistral-medium-3.5',
+      'deepseek-v4-flash',
+      'mistral-small-4',
     ],
   ) {
     // 0. Check if an analysis is already in progress for this PR
@@ -173,9 +175,32 @@ export class ReviewerService {
         `Agents are debating consensus (${successfulResponses.length}/3)... 65%`,
       );
 
-      // 3. Perform Consensus synthesis (Agent Debate) using the first successful model as lead
-      const leadModel = agentResults.find(r => r.status === 'success')?.model || selectedModels[0];
-      const synthesis = await this.synthesizeConsensus(leadModel, successfulResponses, processedDiff);
+      // 3. Perform Consensus synthesis (Agent Debate) with fallback lead models
+      let synthesis: AIReviewResult | null = null;
+      let lastSynthesisError: Error | null = null;
+      
+      // Filter models that successfully provided initial reviews
+      const candidateLeads = agentResults
+        .filter(r => r.status === 'success')
+        .map(r => r.model);
+
+      for (const leadModel of candidateLeads) {
+        try {
+          this.logger.log(`Attempting consensus synthesis with lead model: ${leadModel}`);
+          synthesis = await this.synthesizeConsensus(leadModel, successfulResponses, processedDiff);
+          if (synthesis) break;
+        } catch (e: any) {
+          this.logger.warn(`Synthesis with lead ${leadModel} failed: ${e.message}. Trying next candidate...`);
+          lastSynthesisError = e;
+        }
+      }
+
+      if (!synthesis) {
+        this.logger.error('All candidate lead models failed synthesis debate.');
+        // Fallback: Naive synthesis (just merge all unique findings)
+        synthesis = this.naiveSynthesis(successfulResponses);
+        this.logger.warn('Proceeding with Naive Synthesis fallback.');
+      }
 
       await this.githubService.updateCommitStatus(
         githubToken,
@@ -191,8 +216,15 @@ export class ReviewerService {
         this.prisma.finding.createMany({
           data: synthesis.findings.map((f) => ({
             analysisId: analysis.id,
-            ...f,
-            consensus: true,
+            file: f.file,
+            line: f.line,
+            issue: f.issue,
+            type: f.type,
+            confidence: f.confidence,
+            rationale: f.rationale,
+            resolution: f.resolution,
+            reference: f.reference,
+            commitSha: headSha,
             models: selectedModels,
           })),
         }),
@@ -208,15 +240,42 @@ export class ReviewerService {
         }),
       ]);
 
-      // 5. Post comments back to GitHub
-      await this.githubService.postComments(
-        githubToken,
-        owner,
-        repoName,
-        prNumber,
-        synthesis.findings,
-        headSha,
+      // 5. Extract valid paths from diff to prevent GitHub 422 errors
+      const validPaths = new Set(
+        Array.from(processedDiff.matchAll(/^(?:\+\+\+|---) [ab]\/(.*?)(?:[ \t].*)?$/gm))
+          .map(m => m[1].trim())
       );
+      
+      const filterFindings = synthesis.findings.filter(f => validPaths.has(f.file));
+      
+      if (filterFindings.length < synthesis.findings.length) {
+        this.logger.warn(`Filtered out ${synthesis.findings.length - filterFindings.length} findings with invalid paths. Valid paths: ${Array.from(validPaths).join(', ')}`);
+      }
+
+      // 6. Post comments back to GitHub
+      if (filterFindings.length > 0) {
+        await this.githubService.postComments(
+          githubToken,
+          owner,
+          repoName,
+          prNumber,
+          filterFindings,
+          headSha,
+        );
+      } else {
+        this.logger.log('No valid findings to post after path filtering.');
+        // Still post the summary comment via a separate call if needed, 
+        // but postComments already handles summary. Let's make sure summary is posted.
+        await this.githubService.postSummaryOnly(
+          githubToken,
+          owner,
+          repoName,
+          prNumber,
+          synthesis.findings.length,
+          synthesis.qualityScore,
+          synthesis.securityScore
+        );
+      }
 
       // 6. Update Status to Success
       await this.githubService.updateCommitStatus(
@@ -300,15 +359,21 @@ Return your response in strict JSON format:
         completion = await client.chat.completions.create({
           model,
           messages: [
-            { role: 'system', content: 'You are a strict JSON generator. You MUST output ONLY raw JSON. No preamble, no postamble, no code blocks, no explanation. Your entire response must be a single JSON object. Double-escape all backslashes and escape all internal double quotes.' },
+            { role: 'system', content: 'You are a Senior Engineer. Output ONLY valid JSON. No markdown, no code blocks, no explanation. IMPORTANT: Escape all backslashes as \\\\ and ensure all newlines inside strings are escaped as \\n. The response MUST be a single parseable JSON object.' },
             { role: 'user', content: prompt }
           ],
-          max_tokens: 4096,
+          max_tokens: 3000,
+          temperature: 0.1,
         });
         break;
       } catch (error: any) {
-        if (error.status === 504 && retries > 0) {
-          this.logger.warn(`Agent review for ${modelId} failed with 504, retrying... (${retries} left)`);
+        const isConnectionError = error.message?.toLowerCase().includes('connection') || 
+                                 error.message?.toLowerCase().includes('timeout') ||
+                                 error.status === 504 ||
+                                 error.status === 502;
+        
+        if (isConnectionError && retries > 0) {
+          this.logger.warn(`Agent review for ${modelId} failed (${error.message}), retrying... (${retries} left)`);
           retries--;
           await new Promise(resolve => setTimeout(resolve, 5000));
           continue;
@@ -372,15 +437,21 @@ Return your response in strict JSON format:
         completion = await client.chat.completions.create({
           model,
           messages: [
-            { role: 'system', content: 'You are a strict JSON generator. You MUST output ONLY raw JSON. No preamble, no postamble, no code blocks, no explanation. Your entire response must be a single JSON object. Double-escape all backslashes and escape all internal double quotes.' },
+            { role: 'system', content: 'You are a Lead Architect. Synthesize agent findings into a single JSON object. Be extremely concise. No preamble. No postamble.' },
             { role: 'user', content: prompt }
           ],
-          max_tokens: 4096,
+          max_tokens: 3000,
+          temperature: 0.1,
         });
         break;
-      } catch (error) {
-        if (error.status === 504 && retries > 0) {
-          this.logger.warn(`Synthesis failed with 504, retrying... (${retries} left)`);
+      } catch (error: any) {
+        const isConnectionError = error.message?.toLowerCase().includes('connection') || 
+                                 error.message?.toLowerCase().includes('timeout') ||
+                                 error.status === 504 ||
+                                 error.status === 502;
+                                 
+        if (isConnectionError && retries > 0) {
+          this.logger.warn(`Synthesis for ${modelId} failed (${error.message}), retrying... (${retries} left)`);
           retries--;
           await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5s
           continue;
@@ -483,6 +554,37 @@ Return your response in strict JSON format:
       // 8. Fix premature object closure: }, "findings": -> , "findings":
       fixed = fixed.replace(/\}\s*,\s*"(findings|qualityScore|securityScore|summary)"\s*:/g, ', "$1":');
 
+      // 9. Fix literal newlines inside strings (very common failure)
+      // This regex looks for content between quotes and replaces actual newlines with \n
+      fixed = fixed.replace(/"([^"\\]*(\\.[^"\\]*)*)"/g, (match) => {
+        return match.replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+      });
+
+      // 10. Fix backslashes escaping the closing quote: \" -> \\"
+      // Often models do "file\": \"name.ts\" which breaks the string
+      fixed = fixed.replace(/\\"/g, '\\\\"').replace(/\\\\\\\\"/g, '\\\\"'); // Normalize to \\"
+      fixed = fixed.replace(/([^\\@])\\"/g, '$1\\\\"'); // Ensure quote is escaped with double backslash if not already
+
+      // 11. Discard trailing "babble" (text after the last root brace)
+
+      // 9. Discard trailing "babble" (text after the last root brace)
+      const rootOpenIndex = fixed.indexOf('{');
+      if (rootOpenIndex !== -1) {
+        let depth = 0;
+        let lastMatch = -1;
+        for (let i = rootOpenIndex; i < fixed.length; i++) {
+          if (fixed[i] === '{') depth++;
+          if (fixed[i] === '}') depth--;
+          if (depth === 0) {
+            lastMatch = i;
+            break;
+          }
+        }
+        if (lastMatch !== -1) {
+          fixed = fixed.substring(0, lastMatch + 1);
+        }
+      }
+
       // 8. JSON Balancer: Auto-close truncated objects/arrays
       let braceCount = 0;
       let bracketCount = 0;
@@ -519,5 +621,41 @@ Return your response in strict JSON format:
         };
       }
     }
+  }
+
+  /**
+   * Last resort fallback if all debate/synthesis agents fail.
+   * Merges all unique findings from successful agents.
+   */
+  private naiveSynthesis(agentResponses: any[]): AIReviewResult {
+    const findings: any[] = [];
+    const seen = new Set<string>();
+    let qTotal = 0;
+    let sTotal = 0;
+    let count = 0;
+
+    for (const agent of agentResponses) {
+      const content = agent.content || {};
+      const agentFindings = content.findings || [];
+      
+      qTotal += (content.qualityScore || 0);
+      sTotal += (content.securityScore || 0);
+      count++;
+
+      for (const f of agentFindings) {
+        const key = `${f.file}:${f.line}:${f.issue.substring(0, 30)}`;
+        if (!seen.has(key)) {
+          findings.push(f);
+          seen.add(key);
+        }
+      }
+    }
+
+    return {
+      findings,
+      qualityScore: Math.round(qTotal / (count || 1)),
+      securityScore: Math.round(sTotal / (count || 1)),
+      summary: `Resilient Fallback: Synthesis debate failed, but ${count} agents successfully reviewed the code independently. Merged their findings.`,
+    };
   }
 }

@@ -22,23 +22,40 @@ export class GithubService {
     const octokit = new Octokit({ auth: githubToken });
     const frontendUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
 
-    this.logger.log(`Posting ${findings.length} comments to ${owner}/${repo} PR #${prNumber}`);
-
-    for (const finding of findings) {
-      try {
-        await octokit.rest.pulls.createReviewComment({
-          owner,
-          repo,
-          pull_number: prNumber,
-          commit_id: headSha,
-          body: `### AI Finding: ${finding.type}\n**Issue:** ${finding.issue}\n\n**Rationale:** ${finding.rationale}\n\n**Suggested Resolution:**\n\`\`\`\n${finding.resolution}\n\`\`\``,
+    this.logger.log(`Posting ${findings.length} findings as a review to ${owner}/${repo} PR #${prNumber}`);
+    
+    try {
+      await octokit.rest.pulls.createReview({
+        owner,
+        repo,
+        pull_number: prNumber,
+        commit_id: headSha,
+        event: 'COMMENT',
+        comments: findings.map((finding) => ({
           path: finding.file,
           line: finding.line,
-          side: 'RIGHT',
-          subject_type: 'line',
-        });
-      } catch (error) {
-        this.logger.warn(`Failed to post comment for ${finding.file}:${finding.line}: ${error.message}`);
+            body: `### AI Finding: ${finding.type}\n**Issue:** ${finding.issue}\n\n**Rationale:** ${finding.rationale}\n\n**Suggested Resolution:**\n\`\`\`\n${finding.resolution}\n\`\`\`\n\n---\n*Detected in commit ${headSha.substring(0, 7)} at ${new Date().toLocaleString()}*`,
+        })),
+      });
+    } catch (error: any) {
+      this.logger.error(`Failed to post batch review: ${error.message}`);
+      this.logger.warn(`Falling back to individual comments...`);
+
+      // Fallback: Post comments one by one so that individual path errors don't block everything
+      for (const finding of findings) {
+        try {
+          await octokit.rest.pulls.createReviewComment({
+            owner,
+            repo,
+            pull_number: prNumber,
+            commit_id: headSha,
+            body: `### AI Finding: ${finding.type}\n**Issue:** ${finding.issue}\n\n**Rationale:** ${finding.rationale}\n\n**Suggested Resolution:**\n\`\`\`\n${finding.resolution}\n\`\`\`\n\n---\n*Detected in commit ${headSha.substring(0, 7)} at ${new Date().toLocaleString()}*`,
+            path: finding.file,
+            line: finding.line,
+          });
+        } catch (individualError: any) {
+          this.logger.warn(`Failed to post individual comment for ${finding.file}: ${individualError.message}`);
+        }
       }
     }
 
@@ -48,6 +65,29 @@ export class GithubService {
       repo,
       issue_number: prNumber,
       body: `## 🤖 AI Multi-Agent Review Summary\n\nAnalysis completed. Total issues found: **${findings.length}**\n\n[View full report and debate log](${frontendUrl}/dashboard)`,
+    });
+  }
+
+  /**
+   * Post only a summary comment when no line-specific findings are valid
+   */
+  async postSummaryOnly(
+    githubToken: string,
+    owner: string,
+    repo: string,
+    prNumber: number,
+    totalFindings: number,
+    qualityScore: number,
+    securityScore: number,
+  ) {
+    const octokit = new Octokit({ auth: githubToken });
+    const frontendUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3001';
+
+    await octokit.rest.issues.createComment({
+      owner,
+      repo,
+      issue_number: prNumber,
+      body: `## 🤖 AI Multi-Agent Review Summary\n\nAnalysis completed. Total potential issues identified: **${totalFindings}**\nQuality Score: **${qualityScore}%** | Security Score: **${securityScore}%**\n\n*Note: Line-specific comments were withheld as they referenced files outside the current PR diff.*\n\n[View full report and debate log](${frontendUrl}/dashboard)`,
     });
   }
 
@@ -63,7 +103,7 @@ export class GithubService {
     description: string,
   ) {
     const octokit = new Octokit({ auth: githubToken });
-    const frontendUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
+    const frontendUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3001';
 
     try {
       await octokit.rest.repos.createCommitStatus({
