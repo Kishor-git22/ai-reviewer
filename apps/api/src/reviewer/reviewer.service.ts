@@ -175,9 +175,32 @@ export class ReviewerService {
         `Agents are debating consensus (${successfulResponses.length}/3)... 65%`,
       );
 
-      // 3. Perform Consensus synthesis (Agent Debate) using the first successful model as lead
-      const leadModel = agentResults.find(r => r.status === 'success')?.model || selectedModels[0];
-      const synthesis = await this.synthesizeConsensus(leadModel, successfulResponses, processedDiff);
+      // 3. Perform Consensus synthesis (Agent Debate) with fallback lead models
+      let synthesis: AIReviewResult | null = null;
+      let lastSynthesisError: Error | null = null;
+      
+      // Filter models that successfully provided initial reviews
+      const candidateLeads = agentResults
+        .filter(r => r.status === 'success')
+        .map(r => r.model);
+
+      for (const leadModel of candidateLeads) {
+        try {
+          this.logger.log(`Attempting consensus synthesis with lead model: ${leadModel}`);
+          synthesis = await this.synthesizeConsensus(leadModel, successfulResponses, processedDiff);
+          if (synthesis) break;
+        } catch (e: any) {
+          this.logger.warn(`Synthesis with lead ${leadModel} failed: ${e.message}. Trying next candidate...`);
+          lastSynthesisError = e;
+        }
+      }
+
+      if (!synthesis) {
+        this.logger.error('All candidate lead models failed synthesis debate.');
+        // Fallback: Naive synthesis (just merge all unique findings)
+        synthesis = this.naiveSynthesis(successfulResponses);
+        this.logger.warn('Proceeding with Naive Synthesis fallback.');
+      }
 
       await this.githubService.updateCommitStatus(
         githubToken,
@@ -193,8 +216,15 @@ export class ReviewerService {
         this.prisma.finding.createMany({
           data: synthesis.findings.map((f) => ({
             analysisId: analysis.id,
-            ...f,
-            consensus: true,
+            file: f.file,
+            line: f.line,
+            issue: f.issue,
+            type: f.type,
+            confidence: f.confidence,
+            rationale: f.rationale,
+            resolution: f.resolution,
+            reference: f.reference,
+            commitSha: headSha,
             models: selectedModels,
           })),
         }),
@@ -337,8 +367,13 @@ Return your response in strict JSON format:
         });
         break;
       } catch (error: any) {
-        if (error.status === 504 && retries > 0) {
-          this.logger.warn(`Agent review for ${modelId} failed with 504, retrying... (${retries} left)`);
+        const isConnectionError = error.message?.toLowerCase().includes('connection') || 
+                                 error.message?.toLowerCase().includes('timeout') ||
+                                 error.status === 504 ||
+                                 error.status === 502;
+        
+        if (isConnectionError && retries > 0) {
+          this.logger.warn(`Agent review for ${modelId} failed (${error.message}), retrying... (${retries} left)`);
           retries--;
           await new Promise(resolve => setTimeout(resolve, 5000));
           continue;
@@ -409,9 +444,14 @@ Return your response in strict JSON format:
           temperature: 0.1,
         });
         break;
-      } catch (error) {
-        if (error.status === 504 && retries > 0) {
-          this.logger.warn(`Synthesis failed with 504, retrying... (${retries} left)`);
+      } catch (error: any) {
+        const isConnectionError = error.message?.toLowerCase().includes('connection') || 
+                                 error.message?.toLowerCase().includes('timeout') ||
+                                 error.status === 504 ||
+                                 error.status === 502;
+                                 
+        if (isConnectionError && retries > 0) {
+          this.logger.warn(`Synthesis for ${modelId} failed (${error.message}), retrying... (${retries} left)`);
           retries--;
           await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5s
           continue;
@@ -581,5 +621,41 @@ Return your response in strict JSON format:
         };
       }
     }
+  }
+
+  /**
+   * Last resort fallback if all debate/synthesis agents fail.
+   * Merges all unique findings from successful agents.
+   */
+  private naiveSynthesis(agentResponses: any[]): AIReviewResult {
+    const findings: any[] = [];
+    const seen = new Set<string>();
+    let qTotal = 0;
+    let sTotal = 0;
+    let count = 0;
+
+    for (const agent of agentResponses) {
+      const content = agent.content || {};
+      const agentFindings = content.findings || [];
+      
+      qTotal += (content.qualityScore || 0);
+      sTotal += (content.securityScore || 0);
+      count++;
+
+      for (const f of agentFindings) {
+        const key = `${f.file}:${f.line}:${f.issue.substring(0, 30)}`;
+        if (!seen.has(key)) {
+          findings.push(f);
+          seen.add(key);
+        }
+      }
+    }
+
+    return {
+      findings,
+      qualityScore: Math.round(qTotal / (count || 1)),
+      securityScore: Math.round(sTotal / (count || 1)),
+      summary: `Resilient Fallback: Synthesis debate failed, but ${count} agents successfully reviewed the code independently. Merged their findings.`,
+    };
   }
 }
