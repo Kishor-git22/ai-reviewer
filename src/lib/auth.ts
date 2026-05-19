@@ -44,8 +44,9 @@ export const {
       if (account?.provider === 'github' && account.access_token) {
         try {
           // Sync with our backend to get a backend JWT
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '')
           const response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL}/auth/github/sync`,
+            `${apiUrl}/auth/github/sync`,
             {
               method: 'POST',
               headers: {
