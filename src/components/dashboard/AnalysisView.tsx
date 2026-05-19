@@ -93,7 +93,7 @@ function FindingCard({ finding }: { finding: BackendFinding }) {
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
               <div className={cn("h-1.5 w-1.5 rounded-full", isCritical ? "bg-red-500" : "bg-primary")} />
-              The "Why"
+              The &quot;Why&quot;
             </div>
             <p className="text-sm font-medium leading-relaxed text-foreground/80">
               {finding.rationale}
@@ -104,7 +104,7 @@ function FindingCard({ finding }: { finding: BackendFinding }) {
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-blue-400">
               <Lightbulb className="h-3 w-3" />
-              The "How" (Solution)
+              The &quot;How&quot; (Solution)
             </div>
             <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4 shadow-inner">
               <p className="font-mono text-xs leading-relaxed text-blue-300">
@@ -275,7 +275,7 @@ export function AnalysisView({ pr, analysis, history = [], onBack }: AnalysisVie
             <p className="text-sm font-bold text-muted-foreground mt-1">
               {isProcessing 
                 ? "New changes found in the pull request. AI agents are reviewing them now." 
-                : `Comprehensive analysis for PR #${pr.number}`}
+                : `Comprehensive analysis for PR #${(pr as any).number}`}
             </p>
           </div>
         </div>
@@ -357,7 +357,7 @@ export function AnalysisView({ pr, analysis, history = [], onBack }: AnalysisVie
             </div>
             <h3 className="text-xl font-black text-foreground">No Issues Found</h3>
             <p className="mx-auto max-w-sm text-sm font-medium text-muted-foreground">
-              Prism's multi-agent review system found zero vulnerabilities or quality issues in this
+              Prism&apos;s multi-agent review system found zero vulnerabilities or quality issues in this
               pull request.
             </p>
           </div>

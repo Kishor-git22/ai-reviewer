@@ -177,7 +177,7 @@ export default function DashboardPage() {
     }
 
     if (prs && prNumber && !selectedPr) {
-      const pr = prs.find(p => p.number.toString() === prNumber)
+      const pr = prs.find(p => (p as any).number.toString() === prNumber)
       if (pr) {
         setSelectedPr(pr)
         // If we have a PR but no analysis yet, show model selection
@@ -431,7 +431,7 @@ export default function DashboardPage() {
                       <GitPullRequest size={48} className="text-muted-foreground" />
                     </div>
                     <p className="text-xl font-black text-foreground">No Pull Requests Found</p>
-                    <p className="mt-2 font-bold text-muted-foreground">This repository doesn't have any open or closed PRs yet.</p>
+                    <p className="mt-2 font-bold text-muted-foreground">This repository doesn&apos;t have any open or closed PRs yet.</p>
                   </div>
                 )
               ) : repos?.length ? (
@@ -455,7 +455,7 @@ export default function DashboardPage() {
                     <Globe size={48} className="text-muted-foreground" />
                   </div>
                   <p className="text-xl font-black text-foreground">No Repositories Found</p>
-                  <p className="mt-2 font-bold text-muted-foreground">We couldn't find any repositories in your GitHub account.</p>
+                  <p className="mt-2 font-bold text-muted-foreground">We couldn&apos;t find any repositories in your GitHub account.</p>
                 </div>
               )}
             </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { signIn } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
@@ -22,7 +22,7 @@ import { HeroPrism } from '@/components/canvas/HeroPrism'
 import { Button } from '@/components/ui/button'
 import { NVIDIA_MODELS, LANDING_STATS, FEATURES } from '@/lib/data'
 
-export default function LandingPage() {
+function LandingContent() {
   const [isLoading, setIsLoading] = useState(false)
   const searchParams = useSearchParams()
   const error = searchParams.get('error')
@@ -345,5 +345,13 @@ export default function LandingPage() {
         </div>
       </footer>
     </div>
+  )
+}
+
+export default function LandingPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-950" />}>
+      <LandingContent />
+    </Suspense>
   )
 }

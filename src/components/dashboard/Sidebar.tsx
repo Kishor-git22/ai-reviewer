@@ -133,11 +133,14 @@ export function DashboardSidebar({ children }: SidebarProps) {
               <SidebarFooter className="border-t border-border/50 p-4">
                 <div className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center">
                   {session?.user?.image ? (
-                    <img
-                      src={session.user.image}
-                      alt={session.user.login || 'User'}
-                      className="h-8 w-8 shrink-0 rounded-xl border border-border/50 object-cover shadow-sm transition-transform hover:scale-110"
-                    />
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={session.user.image}
+                        alt={session.user.login || 'User'}
+                        className="h-8 w-8 shrink-0 rounded-xl border border-border/50 object-cover shadow-sm transition-transform hover:scale-110"
+                      />
+                    </>
                   ) : (
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-accent text-[10px] font-black uppercase">
                       {session?.user?.login?.charAt(0)}
