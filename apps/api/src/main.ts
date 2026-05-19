@@ -5,16 +5,20 @@ import { AppModule } from './app.module'
 import { ExpressAdapter } from '@nestjs/platform-express'
 import * as express from 'express'
 
-const server = express()
+const expressApp = express()
+let isInitialized = false
+let nestApp: any
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, new ExpressAdapter(server))
+  if (isInitialized) return
 
-  const configService = app.get(ConfigService)
+  nestApp = await NestFactory.create(AppModule, new ExpressAdapter(expressApp))
+
+  const configService = nestApp.get(ConfigService)
   const port = configService.get<number>('PORT', 3001)
 
   // Enable validation
-  app.useGlobalPipes(
+  nestApp.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: true,
@@ -23,7 +27,7 @@ async function bootstrap() {
   )
 
   // Enable CORS for frontend
-  app.enableCors({
+  nestApp.enableCors({
     origin: [
       'http://localhost:3000',
       'http://127.0.0.1:3000',
@@ -34,19 +38,24 @@ async function bootstrap() {
     credentials: true,
   })
 
-  // Enable clean shutdown on process signals
-  app.enableShutdownHooks()
+  nestApp.enableShutdownHooks()
+  await nestApp.init()
+  isInitialized = true
 
-  await app.init()
-
-  // Start listening only when running locally (not in serverless)
+  // Start listening only when running locally
   if (process.env.NODE_ENV !== 'production') {
-    await app.listen(port)
+    await nestApp.listen(port)
     console.log(`🚀 AI Reviewer API is running on: http://localhost:${port}`)
   }
 }
 
-bootstrap()
+// Local dev: start server immediately
+if (process.env.NODE_ENV !== 'production') {
+  bootstrap()
+}
 
-// Export for Vercel serverless
-export default server
+// Vercel serverless: lazy-init on first request then pass through
+module.exports = async (req: any, res: any) => {
+  await bootstrap()
+  expressApp(req, res)
+}
