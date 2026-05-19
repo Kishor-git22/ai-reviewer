@@ -1,5 +1,5 @@
 import { NestFactory } from '@nestjs/core'
-import { ValidationPipe } from '@nestjs/common'
+import { ValidationPipe, INestApplication } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { AppModule } from './app.module'
 import { ExpressAdapter } from '@nestjs/platform-express'
@@ -7,7 +7,7 @@ import * as express from 'express'
 
 const expressApp = express()
 let isInitialized = false
-let nestApp: any
+let nestApp: INestApplication
 
 async function bootstrap() {
   if (isInitialized) return
