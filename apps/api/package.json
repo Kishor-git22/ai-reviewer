@@ -7,6 +7,8 @@
   "license": "MIT",
   "scripts": {
     "build": "nest build",
+    "vercel-build": "prisma generate && nest build",
+    "postinstall": "prisma generate",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "lsof -ti:3002 | xargs kill -9 2>/dev/null || true && nest start --watch",

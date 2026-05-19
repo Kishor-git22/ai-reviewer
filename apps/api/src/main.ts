@@ -2,13 +2,17 @@ import { NestFactory } from '@nestjs/core'
 import { ValidationPipe } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { AppModule } from './app.module'
+import { ExpressAdapter } from '@nestjs/platform-express'
+import * as express from 'express'
+
+const server = express()
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule)
-  
+  const app = await NestFactory.create(AppModule, new ExpressAdapter(server))
+
   const configService = app.get(ConfigService)
   const port = configService.get<number>('PORT', 3001)
-  
+
   // Enable validation
   app.useGlobalPipes(
     new ValidationPipe({
@@ -31,9 +35,18 @@ async function bootstrap() {
   })
 
   // Enable clean shutdown on process signals
-  app.enableShutdownHooks();
+  app.enableShutdownHooks()
 
-  await app.listen(port)
-  console.log(`🚀 AI Reviewer API is running on: http://localhost:${port}`)
+  await app.init()
+
+  // Start listening only when running locally (not in serverless)
+  if (process.env.NODE_ENV !== 'production') {
+    await app.listen(port)
+    console.log(`🚀 AI Reviewer API is running on: http://localhost:${port}`)
+  }
 }
+
 bootstrap()
+
+// Export for Vercel serverless
+export default server
