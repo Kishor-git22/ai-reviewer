@@ -60,6 +60,34 @@ export function useAnalysisByPr(repoName: string | undefined, prNumber: number |
     },
   })
 }
+
+// Hook to fetch analysis history by PR
+export function useAnalysisHistory(repoName: string | undefined, prNumber: number | undefined) {
+  const { data: session } = useSession()
+  const token = session?.user?.accessToken
+
+  return useQuery({
+    queryKey: ['analysis-history', repoName, prNumber],
+    queryFn: async (): Promise<Analysis[]> => {
+      if (!repoName || !prNumber) return []
+      
+      const response = await fetch(`${API_URL}/reviewer/repo/${repoName}/pr/${prNumber}/history`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      
+      if (!response.ok) return []
+      return response.json()
+    },
+    enabled: !!repoName && !!prNumber && !!token,
+    refetchInterval: (query) => {
+      const history = query.state.data as Analysis[]
+      const hasInProgress = history?.some(a => a.status === 'in_progress')
+      return hasInProgress ? 3000 : false
+    },
+  })
+}
 // Hook to trigger a new analysis
 export function useAnalyzePR() {
   const { data: session } = useSession()

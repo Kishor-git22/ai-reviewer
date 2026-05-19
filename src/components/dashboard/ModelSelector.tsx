@@ -9,10 +9,10 @@ import { cn } from '@/lib/utils'
 export const NVIDIA_MODELS = [
   {
     id: 'deepseek-v4-flash',
-    name: 'DeepSeek V4 Flash',
+    name: 'DeepSeek V4 Flash ⚡',
     provider: 'DeepSeek',
     description: 'Ultra-fast and efficient for quick code reviews and syntax checks.',
-    capability: 'Fast Review',
+    capability: 'Flash Review',
   },
   {
     id: 'deepseek-v4-pro',
@@ -30,10 +30,10 @@ export const NVIDIA_MODELS = [
   },
   {
     id: 'mistral-small-4',
-    name: 'Mistral Small 4',
+    name: 'Mistral Small 4 ⚡',
     provider: 'Mistral AI',
     description: 'Lightweight and reliable for standard PR feedback.',
-    capability: 'Code Quality',
+    capability: 'Fast Review',
   },
   {
     id: 'minimax-m2.7',

@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useAnalysis, useAnalyzePR, useRegisterWebhook, useActiveRepos, useUserSettings, useAnalysisByPr } from '@/hooks/usePrAnalysis'
+import { useSearchParams, useRouter, usePathname } from 'next/navigation'
+import { useAnalysis, useAnalyzePR, useRegisterWebhook, useActiveRepos, useUserSettings, useAnalysisByPr, useAnalysisHistory } from '@/hooks/usePrAnalysis'
 import { useRepos, useRepoPRs } from '@/hooks/useGitHub'
 import { AnalysisView } from '@/components/dashboard/AnalysisView'
 import { NVIDIA_MODELS } from '@/components/dashboard/ModelSelector'
@@ -133,6 +134,10 @@ function PRListItem({
 }
 
 export default function DashboardPage() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+
   const [selectedRepo, setSelectedRepo] = useState<Repository | null>(null)
   const [selectedPr, setSelectedPr] = useState<PullRequest | null>(null)
   const { data: userSettings } = useUserSettings()
@@ -155,13 +160,38 @@ export default function DashboardPage() {
     selectedRepo?.name, 
     selectedPr ? (selectedPr as any).number : undefined
   )
+  const { data: analysisHistory } = useAnalysisHistory(
+    selectedRepo?.name,
+    selectedPr ? (selectedPr as any).number : undefined
+  )
+
+  // Rehydrate state from URL on load/refresh
+  useEffect(() => {
+    const owner = searchParams.get('owner')
+    const repoName = searchParams.get('repo')
+    const prNumber = searchParams.get('pr')
+
+    if (repos && owner && repoName && !selectedRepo) {
+      const repo = repos.find(r => r.owner.login === owner && r.name === repoName)
+      if (repo) setSelectedRepo(repo)
+    }
+
+    if (prs && prNumber && !selectedPr) {
+      const pr = prs.find(p => p.number.toString() === prNumber)
+      if (pr) {
+        setSelectedPr(pr)
+        // If we have a PR but no analysis yet, show model selection
+        if (!currentAnalysisId) setShowModelSelection(true)
+      }
+    }
+  }, [repos, prs, searchParams, selectedRepo, selectedPr, currentAnalysisId])
 
   useEffect(() => {
-    if (selectedPr && prAnalysis && !currentAnalysisId) {
+    if (selectedPr && prAnalysis) {
       setCurrentAnalysisId(prAnalysis.id)
       setShowModelSelection(false)
     }
-  }, [selectedPr, prAnalysis, currentAnalysisId])
+  }, [selectedPr, prAnalysis])
 
   const analyzeMutation = useAnalyzePR()
 
@@ -176,14 +206,26 @@ export default function DashboardPage() {
     }
   }
 
+  const updateUrl = (owner?: string, repo?: string, pr?: string) => {
+    const params = new URLSearchParams()
+    if (owner) params.set('owner', owner)
+    if (repo) params.set('repo', repo)
+    if (pr) params.set('pr', pr)
+    
+    const query = params.toString()
+    router.push(`${pathname}${query ? `?${query}` : ''}`)
+  }
+
   const handleRepoClick = (repo: Repository) => {
     setSelectedRepo(repo)
     setShowModelSelection(false)
+    updateUrl(repo.owner.login, repo.name)
   }
 
   const handlePrClick = (pr: PullRequest) => {
     setSelectedPr(pr)
     setShowModelSelection(true)
+    updateUrl(selectedRepo?.owner.login, selectedRepo?.name, (pr as any).number.toString())
   }
 
   const handleStartAnalysis = async () => {
@@ -209,12 +251,14 @@ export default function DashboardPage() {
     setSelectedPr(null)
     setShowModelSelection(false)
     setCurrentAnalysisId(null)
+    updateUrl()
   }
 
   const handleBackToPrs = () => {
     setSelectedPr(null)
     setShowModelSelection(false)
     setCurrentAnalysisId(null)
+    updateUrl(selectedRepo?.owner.login, selectedRepo?.name)
   }
 
   return (
@@ -252,8 +296,13 @@ export default function DashboardPage() {
       {/* Main Content Area */}
       <div className="flex-1 p-4 sm:p-10">
         {currentAnalysisId ? (
-          analysis?.status === 'completed' ? (
-            <AnalysisView pr={selectedPr!} analysis={analysis} onBack={handleBackToPrs} />
+          (analysis?.status === 'completed' || (analysisHistory && analysisHistory.some(a => a.status === 'completed'))) ? (
+            <AnalysisView 
+              pr={selectedPr!} 
+              analysis={analysis || analysisHistory?.find(a => a.status === 'completed') || {} as any} 
+              history={analysisHistory}
+              onBack={handleBackToPrs} 
+            />
           ) : analysis?.status === 'failed' ? (
             <div className="flex h-full flex-col items-center justify-center space-y-8 py-20 text-center">
               <div className="rounded-full bg-red-500/10 p-6 text-red-500 border border-red-500/20 shadow-2xl shadow-red-500/10">
