@@ -1,7 +1,7 @@
 import { Controller, Post, Body, Get, Param, UseGuards, Request, Patch } from '@nestjs/common';
 import { ReviewerService } from './reviewer.service';
-import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
-import { PrismaService } from '@/prisma/prisma.service';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Controller('reviewer')
 export class ReviewerController {

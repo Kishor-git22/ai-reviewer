@@ -2,7 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import { ConfigService } from '@nestjs/config'
 import axios from 'axios'
-import { UsersService } from '@/users/users.service'
+import { UsersService } from '../users/users.service'
 import { User } from '@prisma/client'
 
 interface GitHubUser {

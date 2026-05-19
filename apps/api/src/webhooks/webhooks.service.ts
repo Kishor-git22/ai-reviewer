@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '@/prisma/prisma.service';
-import { ReviewerService } from '@/reviewer/reviewer.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { ReviewerService } from '../reviewer/reviewer.service';
 import { Octokit } from 'octokit';
 import { ConfigService } from '@nestjs/config';
 
