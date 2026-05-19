@@ -94,8 +94,8 @@ export const {
     },
   },
   pages: {
-    signIn: '/',
-    error: '/',
+    signIn: '/landing',
+    error: '/landing',
   },
   session: {
     strategy: 'jwt',
