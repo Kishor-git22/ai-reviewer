@@ -95,6 +95,8 @@ export interface BackendFinding {
   resolution: string
   models: string[]
   reference?: string
+  commitSha?: string
+  createdAt?: string
 }
 
 export interface Analysis {
