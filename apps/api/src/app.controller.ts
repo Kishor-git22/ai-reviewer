@@ -17,7 +17,7 @@ export class AppController {
 
     return {
       success: true,
-      message: 'Prism AI Code Review Platform - Production Ready Backend',
+      message: 'AI Code Review Platform - Production Ready Backend',
       version: '1.0.0',
       environment: process.env.NODE_ENV || 'development',
       database: {
