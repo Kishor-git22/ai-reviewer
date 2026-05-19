@@ -6,6 +6,7 @@ import { PrismaModule } from './prisma/prisma.module'
 import { ReviewerModule } from './reviewer/reviewer.module';
 import { WebhooksController } from './webhooks/webhooks.controller';
 import { WebhooksService } from './webhooks/webhooks.service';
+import { AppController } from './app.controller';
 
 @Module({
   imports: [
@@ -18,7 +19,7 @@ import { WebhooksService } from './webhooks/webhooks.service';
     UsersModule,
     ReviewerModule,
   ],
-  controllers: [WebhooksController],
+  controllers: [AppController, WebhooksController],
   providers: [WebhooksService],
 })
 export class AppModule {}
