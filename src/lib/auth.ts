@@ -95,8 +95,8 @@ export const {
     },
   },
   pages: {
-    signIn: '/landing',
-    error: '/landing',
+    signIn: `${process.env.NEXT_PUBLIC_APP_URL || ''}/landing`,
+    error: `${process.env.NEXT_PUBLIC_APP_URL || ''}/landing`,
   },
   session: {
     strategy: 'jwt',
