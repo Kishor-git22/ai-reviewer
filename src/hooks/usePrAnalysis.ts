@@ -25,9 +25,9 @@ export function useAnalysis(id: string | null) {
     },
     enabled: !!id && !!token,
     refetchInterval: (query) => {
-      // Poll if analysis is in progress
+      // Poll if analysis is in progress or pending
       const analysis = query.state.data as Analysis | null
-      return analysis?.status === 'in_progress' ? 3000 : false
+      return (analysis?.status === 'in_progress' || analysis?.status === 'pending') ? 3000 : false
     },
   })
 }
@@ -56,7 +56,7 @@ export function useAnalysisByPr(repoName: string | undefined, prNumber: number |
     enabled: !!repoName && !!prNumber && !!token,
     refetchInterval: (query) => {
       const analysis = query.state.data as Analysis | null
-      return analysis?.status === 'in_progress' ? 3000 : false
+      return (analysis?.status === 'in_progress' || analysis?.status === 'pending') ? 3000 : false
     },
   })
 }
@@ -83,8 +83,8 @@ export function useAnalysisHistory(repoName: string | undefined, prNumber: numbe
     enabled: !!repoName && !!prNumber && !!token,
     refetchInterval: (query) => {
       const history = query.state.data as Analysis[]
-      const hasInProgress = history?.some(a => a.status === 'in_progress')
-      return hasInProgress ? 3000 : false
+      const hasActive = history?.some(a => a.status === 'in_progress' || a.status === 'pending')
+      return hasActive ? 3000 : false
     },
   })
 }

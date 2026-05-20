@@ -284,7 +284,13 @@ export default function DashboardPage() {
           </div>
           <p className="text-sm font-bold text-muted-foreground">
             {currentAnalysisId 
-              ? `Multi-agent debate in progress for #${(selectedPr as any).number}`
+              ? (analysis?.status === 'completed' || (analysisHistory && analysisHistory.some(a => a.status === 'completed')))
+                ? `Comprehensive analysis for PR #${(selectedPr as any).number}`
+                : analysis?.status === 'stopped'
+                  ? `Analysis stopped for PR #${(selectedPr as any).number}`
+                  : analysis?.status === 'failed'
+                    ? `Analysis failed for PR #${(selectedPr as any).number}`
+                    : `Multi-agent debate in progress for #${(selectedPr as any).number}`
               : selectedPr 
                 ? 'Configure your AI agents for this review.'
                 : selectedRepo 
@@ -304,6 +310,25 @@ export default function DashboardPage() {
               history={analysisHistory}
               onBack={handleBackToPrs} 
             />
+          ) : analysis?.status === 'stopped' ? (
+            <div className="flex h-full flex-col items-center justify-center space-y-8 py-20 text-center">
+              <div className="rounded-full bg-red-500/10 p-6 text-red-500 border border-red-500/20 shadow-2xl shadow-red-500/10">
+                <AlertCircle size={48} />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-2xl font-black text-foreground">Analysis Stopped</h2>
+                <p className="text-sm font-bold text-muted-foreground max-w-md">
+                  The AI analysis has been stopped because the pull request has been closed.
+                </p>
+              </div>
+              <Button 
+                onClick={handleBackToPrs} 
+                variant="outline" 
+                className="rounded-full px-8 h-12 font-black border-primary/20 hover:bg-primary/5 transition-all"
+              >
+                Back to Pull Requests
+              </Button>
+            </div>
           ) : analysis?.status === 'failed' ? (
             <div className="flex h-full flex-col items-center justify-center space-y-8 py-20 text-center">
               <div className="rounded-full bg-red-500/10 p-6 text-red-500 border border-red-500/20 shadow-2xl shadow-red-500/10">

@@ -105,7 +105,7 @@ export interface Analysis {
   repoName: string
   prNumber: number
   title: string
-  status: 'pending' | 'in_progress' | 'completed' | 'failed'
+  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'stopped'
   qualityScore: number | null
   securityScore: number | null
   models: string[]
