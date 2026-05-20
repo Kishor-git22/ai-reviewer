@@ -42,6 +42,13 @@ jobs:
             }
 
             https.get(url, (res) => {
+              if (res.statusCode !== 200) {
+                console.log(`⚠️ Status endpoint returned HTTP ${res.statusCode}. (If 404, please push your backend changes to Vercel first!)`);
+                count++;
+                setTimeout(getStatus, 5000);
+                return;
+              }
+
               let data = "";
               res.on("data", (chunk) => { data += chunk; });
               res.on("end", () => {
