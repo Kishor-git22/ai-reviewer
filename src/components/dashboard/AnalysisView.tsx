@@ -271,14 +271,31 @@ export function AnalysisView({ pr, analysis, history = [], onBack }: AnalysisVie
                   Analyzing New Changes...
                 </Badge>
               )}
+              {analysis.status === 'stopped' && (
+                <Badge variant="destructive" className="bg-red-500/20 text-red-400 border-red-500/20">
+                  <AlertCircle className="mr-2 h-3 w-3" />
+                  Analysis Stopped
+                </Badge>
+              )}
             </h1>
             <p className="text-sm font-bold text-muted-foreground mt-1">
-              {isProcessing 
-                ? "New changes found in the pull request. AI agents are reviewing them now." 
-                : `Comprehensive analysis for PR #${(pr as any).number}`}
+              {analysis.status === 'stopped'
+                ? "The AI analysis has been stopped because the pull request has been closed."
+                : isProcessing 
+                  ? "New changes found in the pull request. AI agents are reviewing them now." 
+                  : `Comprehensive analysis for PR #${(pr as any).number}`}
             </p>
           </div>
         </div>
+
+        {analysis.status === 'stopped' && (
+          <div className="flex items-center gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-red-200">
+            <AlertCircle className="h-5 w-5 shrink-0 text-red-400" />
+            <span className="text-sm font-bold">
+              The AI analysis has been stopped because the pull request has been closed.
+            </span>
+          </div>
+        )}
 
         {/* Responsive Stats Grid */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
