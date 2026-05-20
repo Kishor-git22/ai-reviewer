@@ -17,7 +17,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         }
         // Set optimal connection limit for serverless functions
         if (!urlObj.searchParams.has('connection_limit')) {
-          urlObj.searchParams.set('connection_limit', '10')
+          urlObj.searchParams.set('connection_limit', '2')
         }
         
         url = urlObj.toString()
@@ -25,10 +25,11 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         // Fallback if URL parsing fails for any reason
         if (!url.includes('pool_timeout')) {
           const separator = url.includes('?') ? '&' : '?';
-          url = `${url}${separator}pool_timeout=30&connection_limit=10`;
+          url = `${url}${separator}pool_timeout=30&connection_limit=2`;
         }
       }
     }
+
 
     super({
       datasources: {
