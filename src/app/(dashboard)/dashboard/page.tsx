@@ -148,10 +148,10 @@ export default function DashboardPage() {
   const referenceModel = userSettings?.referenceModel || 'phi-4'
   
   const activeAgents = [
-    { role: 'For Code Review', id: codeReviewModel },
-    { role: 'For Vulnerability', id: securityModel },
-    { role: 'For Score', id: scoringModel },
-    { role: 'For Reference', id: referenceModel },
+    { role: 'Code Quality & Architecture Guard', id: codeReviewModel },
+    { role: 'Security Compliance & Risk Auditor', id: securityModel },
+    { role: 'Quantitative Metrics & Scoring Engine', id: scoringModel },
+    { role: 'Compliance Standards Referencer', id: referenceModel },
   ]
 
   const [showModelSelection, setShowModelSelection] = useState(false)

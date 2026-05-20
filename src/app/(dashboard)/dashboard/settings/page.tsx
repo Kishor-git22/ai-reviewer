@@ -160,28 +160,28 @@ export default function SettingsPage() {
       <div className="space-y-8">
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <RoleSelector 
-            label="For Code Review" 
+            label="Code Quality & Architecture Guard" 
             description="Analyzes code changes for readability, clean code patterns, performance bottlenecks, and architectural violations." 
             value={codeReviewModel} 
             onChange={setCodeReviewModel} 
             icon={FileCode} 
           />
           <RoleSelector 
-            label="For Vulnerability" 
+            label="Security Compliance & Risk Auditor" 
             description="Identifies security vulnerabilities, injection risks, authentication flaws, credential leaks, and OWASP Top 10 issues." 
             value={securityModel} 
             onChange={setSecurityModel} 
             icon={ShieldCheck} 
           />
           <RoleSelector 
-            label="For Score" 
+            label="Quantitative Metrics & Scoring Engine" 
             description="Evaluates the overall diff and findings to compute quality/security scores and draft the pull request review summary." 
             value={scoringModel} 
             onChange={setScoringModel} 
             icon={Cpu} 
           />
           <RoleSelector 
-            label="For Reference" 
+            label="Compliance Standards Referencer" 
             description="Augments all identified findings with compliance documentation, CWE codes, OWASP references, or official language docs." 
             value={referenceModel} 
             onChange={setReferenceModel} 
