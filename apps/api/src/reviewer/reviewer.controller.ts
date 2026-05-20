@@ -206,56 +206,19 @@ export class ReviewerController {
   async getSettings(@Request() req) {
     const user = await this.prisma.user.findUnique({
       where: { id: req.user.id },
-      select: {
-        codeReviewModel: true,
-        securityModel: true,
-        scoringModel: true,
-        referenceModel: true,
-      },
+      select: { selectedModels: true },
     });
-    
-    // For backward compatibility, selectedModels returns [codeReviewModel, securityModel, scoringModel]
-    return {
-      ...user,
-      selectedModels: user ? [user.codeReviewModel, user.securityModel, user.scoringModel] : [],
-    };
+    return user;
   }
 
   @UseGuards(JwtAuthGuard)
   @Patch('settings')
-  async updateSettings(
-    @Request() req,
-    @Body() body: {
-      codeReviewModel?: string;
-      securityModel?: string;
-      scoringModel?: string;
-      referenceModel?: string;
-    },
-  ) {
-    const data: any = {};
-    if (body.codeReviewModel) data.codeReviewModel = body.codeReviewModel;
-    if (body.securityModel) data.securityModel = body.securityModel;
-    if (body.scoringModel) data.scoringModel = body.scoringModel;
-    if (body.referenceModel) data.referenceModel = body.referenceModel;
-
-    // For backward compatibility, update the selectedModels array as well
-    if (body.codeReviewModel || body.securityModel || body.scoringModel) {
-      const user = await this.prisma.user.findUnique({
-        where: { id: req.user.id },
-        select: { codeReviewModel: true, securityModel: true, scoringModel: true },
-      });
-      const newReview = body.codeReviewModel || user?.codeReviewModel || 'llama-3.1';
-      const newSecurity = body.securityModel || user?.securityModel || 'deepseek-v4-pro';
-      const newScoring = body.scoringModel || user?.scoringModel || 'mistral-medium-3.5';
-      data.selectedModels = [newReview, newSecurity, newScoring];
-    }
-
+  async updateSettings(@Request() req, @Body() body: { selectedModels: string[] }) {
     return this.prisma.user.update({
       where: { id: req.user.id },
-      data,
+      data: { selectedModels: body.selectedModels },
     });
   }
-
 
   @UseGuards(JwtAuthGuard)
   @Get('active-repos')
