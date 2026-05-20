@@ -91,9 +91,6 @@ export class GithubService {
     });
   }
 
-  /**
-   * Update GitHub Commit Status with progress
-   */
   async updateCommitStatus(
     githubToken: string,
     owner: string,
@@ -109,6 +106,7 @@ export class GithubService {
     const octokit = new Octokit({ auth: githubToken });
     const frontendUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3001';
 
+    // 1. Update old-school Commit Status (shown on PR conversation page)
     try {
       await octokit.rest.repos.createCommitStatus({
         owner,
@@ -121,6 +119,72 @@ export class GithubService {
       });
     } catch (error) {
       this.logger.error(`Failed to update commit status: ${error.message}`);
+    }
+
+    // 2. Manage the GitHub Check Run (so it appears under the Checks tab)
+    try {
+      let checkRunId: number | null = null;
+      
+      const checkRuns = await octokit.rest.checks.listForRef({
+        owner,
+        repo,
+        ref: headSha,
+        check_name: 'AI Code Review (NVIDIA NIM)',
+      });
+      
+      if (checkRuns.data.check_runs.length > 0) {
+        checkRunId = checkRuns.data.check_runs[0].id;
+      }
+
+      const statusMap: Record<string, 'queued' | 'in_progress' | 'completed'> = {
+        pending: 'in_progress',
+        success: 'completed',
+        failure: 'completed',
+        error: 'completed',
+      };
+
+      const conclusionMap: Record<string, 'success' | 'failure' | undefined> = {
+        pending: undefined,
+        success: 'success',
+        failure: 'failure',
+        error: 'failure',
+      };
+
+      const status = statusMap[state] || 'in_progress';
+      const conclusion = conclusionMap[state];
+
+      if (checkRunId) {
+        await octokit.rest.checks.update({
+          owner,
+          repo,
+          check_run_id: checkRunId,
+          status,
+          conclusion: conclusion as any,
+          completed_at: status === 'completed' ? new Date().toISOString() : undefined,
+          output: {
+            title: description,
+            summary: `AI Multi-Agent Debate review is currently ${state}.\nDetails: ${description}`,
+          },
+        });
+      } else {
+        await octokit.rest.checks.create({
+          owner,
+          repo,
+          name: 'AI Code Review (NVIDIA NIM)',
+          head_sha: headSha,
+          status,
+          conclusion: conclusion as any,
+          started_at: new Date().toISOString(),
+          completed_at: status === 'completed' ? new Date().toISOString() : undefined,
+          output: {
+            title: description,
+            summary: `AI Multi-Agent Debate review has started.\nDetails: ${description}`,
+          },
+          details_url: `${frontendUrl}/dashboard`,
+        });
+      }
+    } catch (checkError: any) {
+      this.logger.warn(`Failed to update Check Run under Checks tab: ${checkError.message}`);
     }
   }
 }
