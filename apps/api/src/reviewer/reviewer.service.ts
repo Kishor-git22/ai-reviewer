@@ -166,6 +166,16 @@ export class ReviewerService {
         throw new Error('All AI agents failed to respond. Please check your API keys or try again later.');
       }
 
+      // Check if stopped before starting synthesis
+      let checkAnalysis = await this.prisma.analysis.findUnique({
+        where: { id: analysis.id },
+        select: { status: true },
+      });
+      if (checkAnalysis?.status === 'stopped') {
+        this.logger.log(`Analysis ${analysis.id} was stopped. Aborting debate review.`);
+        return analysis.id;
+      }
+
       await this.githubService.updateCommitStatus(
         githubToken,
         owner,
@@ -200,6 +210,16 @@ export class ReviewerService {
         // Fallback: Naive synthesis (just merge all unique findings)
         synthesis = this.naiveSynthesis(successfulResponses);
         this.logger.warn('Proceeding with Naive Synthesis fallback.');
+      }
+
+      // Check if stopped before updating database
+      checkAnalysis = await this.prisma.analysis.findUnique({
+        where: { id: analysis.id },
+        select: { status: true },
+      });
+      if (checkAnalysis?.status === 'stopped') {
+        this.logger.log(`Analysis ${analysis.id} was stopped. Aborting final updates.`);
+        return analysis.id;
       }
 
       await this.githubService.updateCommitStatus(
@@ -243,29 +263,25 @@ export class ReviewerService {
       // 5. Extract valid paths from diff to prevent GitHub 422 errors
       const validPaths = new Set(
         Array.from(processedDiff.matchAll(/^(?:\+\+\+|---) [ab]\/(.*?)(?:[ \t].*)?$/gm))
-          .map(m => m[1].trim())
+          .map((m) => m[1])
+          .filter(Boolean)
       );
-      
-      const filterFindings = synthesis.findings.filter(f => validPaths.has(f.file));
-      
-      if (filterFindings.length < synthesis.findings.length) {
-        this.logger.warn(`Filtered out ${synthesis.findings.length - filterFindings.length} findings with invalid paths. Valid paths: ${Array.from(validPaths).join(', ')}`);
-      }
 
-      // 6. Post comments back to GitHub
-      if (filterFindings.length > 0) {
+      // Filter findings to only those that apply to valid paths in the diff
+      const validFindings = synthesis.findings.filter((f) => validPaths.has(f.file));
+
+      if (validFindings.length > 0) {
+        this.logger.log(`Posting ${validFindings.length} valid inline review comments...`);
         await this.githubService.postComments(
           githubToken,
           owner,
           repoName,
           prNumber,
-          filterFindings,
+          validFindings,
           headSha,
         );
       } else {
-        this.logger.log('No valid findings to post after path filtering.');
-        // Still post the summary comment via a separate call if needed, 
-        // but postComments already handles summary. Let's make sure summary is posted.
+        this.logger.log('No inline findings match the PR diff files. Posting summary only.');
         await this.githubService.postSummaryOnly(
           githubToken,
           owner,
@@ -273,7 +289,7 @@ export class ReviewerService {
           prNumber,
           synthesis.findings.length,
           synthesis.qualityScore,
-          synthesis.securityScore
+          synthesis.securityScore,
         );
       }
 
@@ -291,6 +307,16 @@ export class ReviewerService {
     } catch (error) {
       this.logger.error(`Analysis failed for PR #${prNumber}: ${error.message}`);
       
+      const checkAnalysis = await this.prisma.analysis.findUnique({
+        where: { id: analysis.id },
+        select: { status: true },
+      }).catch(() => null);
+
+      if (checkAnalysis?.status === 'stopped') {
+        this.logger.log(`Analysis ${analysis.id} was stopped. Ignoring failure status update.`);
+        return analysis.id;
+      }
+
       await this.prisma.analysis.update({
         where: { id: analysis.id },
         data: { status: 'failed' },
@@ -657,5 +683,26 @@ Return your response in strict JSON format:
       securityScore: Math.round(sTotal / (count || 1)),
       summary: `Resilient Fallback: Synthesis debate failed, but ${count} agents successfully reviewed the code independently. Merged their findings.`,
     };
+  }
+
+  /**
+   * Expose githubService status updates to other services (like webhooks)
+   */
+  async updateCommitStatus(
+    githubToken: string,
+    owner: string,
+    repoName: string,
+    headSha: string,
+    state: 'pending' | 'success' | 'failure' | 'error',
+    description: string,
+  ) {
+    return this.githubService.updateCommitStatus(
+      githubToken,
+      owner,
+      repoName,
+      headSha,
+      state,
+      description
+    );
   }
 }

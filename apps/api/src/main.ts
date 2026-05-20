@@ -27,14 +27,29 @@ async function bootstrap() {
   )
 
   // Enable CORS for frontend
+  const allowedOrigins = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://localhost:3001',
+    'http://127.0.0.1:3001',
+    'https://ai-code-reviewer-application.vercel.app',
+  ]
+
   nestApp.enableCors({
-    origin: [
-      'http://localhost:3000',
-      'http://127.0.0.1:3000',
-      'http://localhost:3001',
-      'http://127.0.0.1:3001',
-      'https://ai-code-reviewer-application.vercel.app',
-    ],
+    origin: (origin, callback) => {
+      if (!origin) {
+        callback(null, true)
+        return
+      }
+      const isAllowed = allowedOrigins.includes(origin) || 
+                        origin.endsWith('.vercel.app') ||
+                        /^http:\/\/localhost:\d+$/.test(origin)
+      if (isAllowed) {
+        callback(null, true)
+      } else {
+        callback(new Error('Not allowed by CORS'))
+      }
+    },
     credentials: true,
   })
 
