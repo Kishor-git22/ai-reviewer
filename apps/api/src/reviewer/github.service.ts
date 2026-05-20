@@ -109,6 +109,7 @@ export class GithubService {
     const octokit = new Octokit({ auth: githubToken });
     const frontendUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3001';
 
+    // 1. Update the Commit Status API (displays in Conversation tab)
     try {
       await octokit.rest.repos.createCommitStatus({
         owner,
@@ -119,8 +120,62 @@ export class GithubService {
         description,
         target_url: `${frontendUrl}/dashboard`,
       });
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`Failed to update commit status: ${error.message}`);
+    }
+
+    // 2. Create/Update Check Run (displays in Checks tab like CI workflow)
+    try {
+      let checkStatus: 'queued' | 'in_progress' | 'completed' = 'in_progress';
+      let conclusion: 'success' | 'failure' | 'neutral' | 'cancelled' | 'timed_out' | undefined = undefined;
+
+      if (state === 'pending') {
+        checkStatus = 'in_progress';
+      } else {
+        checkStatus = 'completed';
+        conclusion = state === 'success' ? 'success' : 'failure';
+      }
+
+      // Check if Check Run already exists
+      const { data: existingChecks } = await octokit.rest.checks.listForRef({
+        owner,
+        repo,
+        ref: headSha,
+        check_name: 'AI Code Review (NVIDIA NIM)',
+      });
+
+      const checkRun = existingChecks.check_runs[0];
+
+      if (checkRun) {
+        await octokit.rest.checks.update({
+          owner,
+          repo,
+          check_run_id: checkRun.id,
+          status: checkStatus,
+          conclusion,
+          details_url: `${frontendUrl}/dashboard`,
+          output: {
+            title: 'AI Code Review (NVIDIA NIM)',
+            summary: description,
+          },
+        });
+      } else {
+        await octokit.rest.checks.create({
+          owner,
+          repo,
+          name: 'AI Code Review (NVIDIA NIM)',
+          head_sha: headSha,
+          status: checkStatus,
+          conclusion,
+          details_url: `${frontendUrl}/dashboard`,
+          output: {
+            title: 'AI Code Review (NVIDIA NIM)',
+            summary: description,
+          },
+        });
+      }
+    } catch (error: any) {
+      this.logger.error(`Failed to manage check run: ${error.message}`);
     }
   }
 }

@@ -161,6 +161,20 @@ export class WebhooksService {
     // 2. Fetch the diff from GitHub
     const githubToken = await this.getUserGithubToken(repoRecord.userId);
 
+    // Set initial status check on GitHub immediately so the check appears on the PR page
+    try {
+      await this.reviewerService.updateCommitStatus(
+        githubToken,
+        repo.owner.login,
+        repo.name,
+        pr.head.sha,
+        'pending',
+        'AI Agents are starting code analysis... 10%',
+      );
+    } catch (err: any) {
+      this.logger.warn(`Failed to set initial commit status check: ${err.message}`);
+    }
+
     // Return immediately to satisfy GitHub's 10s timeout
     // and run the analysis in the background
     this.processBackgroundAnalysis(repo, pr, repoRecord, githubToken, event, payload).catch(err => {
