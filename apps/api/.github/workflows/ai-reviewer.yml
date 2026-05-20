@@ -83,9 +83,10 @@ jobs:
                   // Calculate remaining and completion time
                   const remaining = Math.max(0, ESTIMATED_TOTAL - actualElapsed);
                   const completionTime = new Date(createdTime + ESTIMATED_TOTAL * 1000);
-                  const completionStr = completionTime.toLocaleTimeString();
+                  const completionStr = completionTime.toLocaleTimeString("en-US", { timeZoneName: "short" });
 
                   console.log("\n" + "=".repeat(40));
+
                   console.log(`🤖 Status:           ${json.status.toUpperCase()}`);
                   if (modelNames) {
                     console.log(`👥 Active Agents:    ${modelNames}`);
