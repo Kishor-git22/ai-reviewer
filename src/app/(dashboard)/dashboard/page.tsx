@@ -142,6 +142,17 @@ export default function DashboardPage() {
   const [selectedPr, setSelectedPr] = useState<PullRequest | null>(null)
   const { data: userSettings } = useUserSettings()
   const selectedModels = userSettings?.selectedModels || ['llama-3.1', 'deepseek-v4-pro', 'mistral-medium-3.5']
+  const codeReviewModel = userSettings?.codeReviewModel || 'llama-3.1'
+  const securityModel = userSettings?.securityModel || 'deepseek-v4-pro'
+  const scoringModel = userSettings?.scoringModel || 'mistral-medium-3.5'
+  const referenceModel = userSettings?.referenceModel || 'phi-4'
+  
+  const activeAgents = [
+    { role: 'For Code Review', id: codeReviewModel },
+    { role: 'For Vulnerability', id: securityModel },
+    { role: 'For Score', id: scoringModel },
+    { role: 'For Reference', id: referenceModel },
+  ]
 
   const [showModelSelection, setShowModelSelection] = useState(false)
   const [currentAnalysisId, setCurrentAnalysisId] = useState<string | null>(null)
@@ -237,7 +248,7 @@ export default function DashboardPage() {
         prNumber: (selectedPr as any).number,
         title: selectedPr.title,
         owner: selectedRepo.owner.login,
-        models: selectedModels,
+        models: [codeReviewModel, securityModel, scoringModel, referenceModel],
         headSha: (selectedPr as any).headSha,
       })
       setCurrentAnalysisId(result.id)
@@ -366,12 +377,15 @@ export default function DashboardPage() {
                 </p>
               </div>
               <div className="grid grid-cols-1 gap-3 w-full max-w-sm">
-                {selectedModels.map((mid: string) => {
-                  const m = NVIDIA_MODELS.find(x => x.id === mid)
+                {activeAgents.map((agent) => {
+                  const m = NVIDIA_MODELS.find(x => x.id === agent.id)
                   return (
-                    <div key={mid} className="flex items-center gap-3 rounded-2xl border border-border/50 bg-card/50 p-4">
-                      <div className="h-2 w-2 animate-pulse rounded-full bg-primary" />
-                      <span className="font-bold text-sm">{m?.name} is reviewing...</span>
+                    <div key={agent.role} className="flex items-center gap-3 rounded-2xl border border-border/50 bg-card/50 p-4 justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="h-2 w-2 animate-pulse rounded-full bg-primary" />
+                        <span className="font-bold text-sm">{m?.name || agent.id}</span>
+                      </div>
+                      <span className="text-[9px] font-black uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full">{agent.role}</span>
                     </div>
                   )
                 })}
@@ -388,14 +402,14 @@ export default function DashboardPage() {
                 </p>
               </div>
               
-              <div className="flex justify-center gap-4">
-                {selectedModels.map((modelId: string) => {
-                  const modelInfo = NVIDIA_MODELS.find(m => m.id === modelId);
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-4 justify-center w-full">
+                {activeAgents.map((agent) => {
+                  const modelInfo = NVIDIA_MODELS.find(m => m.id === agent.id);
                   return (
-                    <div key={modelId} className="flex flex-col items-center p-4 bg-card/50 border border-border/50 rounded-2xl w-48 text-center">
+                    <div key={agent.role} className="flex flex-col items-center p-4 bg-card/50 border border-border/50 rounded-2xl text-center">
                       <Cpu className="h-8 w-8 text-primary mb-2" />
-                      <span className="font-bold text-sm text-foreground">{modelInfo?.name || modelId}</span>
-                      <span className="text-xs text-muted-foreground mt-1 capitalize">{modelInfo?.capability || 'AI Agent'}</span>
+                      <span className="font-bold text-xs text-foreground truncate w-full">{modelInfo?.name || agent.id}</span>
+                      <span className="text-[9px] font-black uppercase text-primary mt-1 tracking-wider bg-primary/10 px-2 py-0.5 rounded-full">{agent.role}</span>
                     </div>
                   )
                 })}
@@ -404,7 +418,7 @@ export default function DashboardPage() {
             <div className="flex justify-end pt-6">
               <Button
                 size="lg"
-                disabled={selectedModels.length !== 3 || analyzeMutation.isPending}
+                disabled={analyzeMutation.isPending}
                 onClick={handleStartAnalysis}
                 className="gap-2 rounded-[2rem] px-10 h-16 text-lg font-black shadow-2xl shadow-primary/30 transition-all hover:scale-105 active:scale-95"
               >
