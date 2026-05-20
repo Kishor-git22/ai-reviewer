@@ -102,6 +102,7 @@ export function useAnalyzePR() {
       title: string
       owner: string
       models?: string[]
+      headSha?: string
     }) => {
       // 1. Fetch the diff from GitHub first
       const diffResponse = await fetch(
@@ -132,7 +133,7 @@ export function useAnalyzePR() {
           models: data.models,
           githubToken,
           owner: data.owner,
-          headSha: (data as any).headSha,
+          headSha: data.headSha,
         }),
       })
 
