@@ -73,7 +73,7 @@ export class ReviewerService {
     return new OpenAI({
       baseURL: 'https://integrate.api.nvidia.com/v1',
       apiKey,
-      timeout: 900000, // 15 minutes
+      timeout: 90000, // 90 seconds
     });
   }
 
@@ -124,8 +124,13 @@ export class ReviewerService {
     let scoringModel = user?.scoringModel || 'mistral-medium-3.5';
     let referenceModel = user?.referenceModel || 'phi-4';
 
-    // Map if selectedModels was explicitly supplied (e.g. from an old client call)
-    if (selectedModels && selectedModels.length === 3) {
+    // Map if selectedModels was explicitly supplied (e.g. from client call or webhook)
+    if (selectedModels && selectedModels.length === 4) {
+      codeReviewModel = selectedModels[0];
+      securityModel = selectedModels[1];
+      scoringModel = selectedModels[2];
+      referenceModel = selectedModels[3];
+    } else if (selectedModels && selectedModels.length === 3) {
       codeReviewModel = selectedModels[0];
       securityModel = selectedModels[1];
       scoringModel = selectedModels[2];

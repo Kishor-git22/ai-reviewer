@@ -224,7 +224,14 @@ export class WebhooksService {
         githubToken,
         repo.owner.login,
         pr.head.sha,
-        repoRecord.user.selectedModels || undefined,
+        repoRecord.user.codeReviewModel
+          ? [
+              repoRecord.user.codeReviewModel,
+              repoRecord.user.securityModel,
+              repoRecord.user.scoringModel,
+              repoRecord.user.referenceModel,
+            ]
+          : repoRecord.user.selectedModels || undefined,
       );
     } catch (error) {
       this.logger.error(`Automatic analysis failed for ${repo.full_name} PR #${pr.number}: ${error.message}`);
