@@ -2,6 +2,7 @@ import { Controller, Post, Body, Get, Param, UseGuards, Request, Patch } from '@
 import { ReviewerService } from './reviewer.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
+import { Octokit } from 'octokit';
 
 @Controller('reviewer')
 export class ReviewerController {
@@ -40,26 +41,134 @@ export class ReviewerController {
 
   @UseGuards(JwtAuthGuard)
   @Get('analysis/:id')
-  async getAnalysis(@Param('id') id: string) {
-    return this.prisma.analysis.findUnique({
+  async getAnalysis(
+    @Request() req,
+    @Param('id') id: string,
+  ) {
+    const analysis = await this.prisma.analysis.findUnique({
       where: { id },
-      include: {
-        findings: true,
-      },
+      include: { findings: true },
     });
+
+    if (!analysis) return null;
+
+    if (analysis.status === 'in_progress' || analysis.status === 'pending') {
+      try {
+        const repoRecord = await this.prisma.repository.findFirst({
+          where: { name: analysis.repoName, userId: analysis.userId },
+        });
+
+        const user = await this.prisma.user.findUnique({
+          where: { id: analysis.userId },
+        });
+
+        if (repoRecord && user && user.githubToken) {
+          const octokit = new Octokit({ auth: user.githubToken });
+          const { data: pr } = await octokit.rest.pulls.get({
+            owner: repoRecord.owner,
+            repo: analysis.repoName,
+            pull_number: analysis.prNumber,
+          });
+
+          if (pr && pr.state === 'closed') {
+            const updatedAnalysis = await this.prisma.analysis.update({
+              where: { id: analysis.id },
+              data: {
+                status: 'stopped',
+                summary: 'The AI analysis has been stopped because the pull request has been closed.',
+              },
+              include: { findings: true },
+            });
+
+            try {
+              await this.reviewerService.updateCommitStatus(
+                user.githubToken,
+                repoRecord.owner,
+                analysis.repoName,
+                pr.head.sha,
+                'failure',
+                'AI Analysis stopped - Pull request closed.',
+              );
+            } catch (statusErr) {
+              this.reviewerService['logger'].error(`Failed to update status on dynamic abort: ${statusErr.message}`);
+            }
+
+            return updatedAnalysis;
+          }
+        }
+      } catch (err: any) {
+        this.reviewerService['logger'].error(`Failed dynamic PR status check: ${err.message}`);
+      }
+    }
+
+    return analysis;
   }
 
   @UseGuards(JwtAuthGuard)
   @Get('repo/:repoName/pr/:prNumber/analysis')
   async getAnalysisByPr(
+    @Request() req,
     @Param('repoName') repoName: string,
     @Param('prNumber') prNumber: string,
   ) {
-    return this.prisma.analysis.findFirst({
+    const analysis = await this.prisma.analysis.findFirst({
       where: { repoName, prNumber: parseInt(prNumber, 10) },
       orderBy: { createdAt: 'desc' },
       include: { findings: true },
     });
+
+    if (!analysis) return null;
+
+    if (analysis.status === 'in_progress' || analysis.status === 'pending') {
+      try {
+        const repoRecord = await this.prisma.repository.findFirst({
+          where: { name: repoName, userId: analysis.userId },
+        });
+
+        const user = await this.prisma.user.findUnique({
+          where: { id: analysis.userId },
+        });
+
+        if (repoRecord && user && user.githubToken) {
+          const octokit = new Octokit({ auth: user.githubToken });
+          const { data: pr } = await octokit.rest.pulls.get({
+            owner: repoRecord.owner,
+            repo: repoName,
+            pull_number: parseInt(prNumber, 10),
+          });
+
+          if (pr && pr.state === 'closed') {
+            const updatedAnalysis = await this.prisma.analysis.update({
+              where: { id: analysis.id },
+              data: {
+                status: 'stopped',
+                summary: 'The AI analysis has been stopped because the pull request has been closed.',
+              },
+              include: { findings: true },
+            });
+
+            try {
+              await this.reviewerService.updateCommitStatus(
+                user.githubToken,
+                repoRecord.owner,
+                repoName,
+                pr.head.sha,
+                'failure',
+                'AI Analysis stopped - Pull request closed.',
+              );
+            } catch (statusErr) {
+              this.reviewerService['logger'].error(`Failed to update status on dynamic abort: ${statusErr.message}`);
+            }
+
+            return updatedAnalysis;
+          }
+        }
+      } catch (err: any) {
+        this.reviewerService['logger'].error(`Failed dynamic PR status check: ${err.message}`);
+      }
+    }
+
+    return analysis;
   }
 
   @UseGuards(JwtAuthGuard)
