@@ -3,9 +3,10 @@ import { ValidationPipe, INestApplication } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { AppModule } from './app.module'
 import { ExpressAdapter } from '@nestjs/platform-express'
-import express from 'express'
+import * as express from 'express'
 
 const expressApp = express()
+
 let isInitialized = false
 let nestApp: INestApplication
 
