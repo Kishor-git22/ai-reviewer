@@ -102,6 +102,10 @@ export class GithubService {
     state: 'pending' | 'success' | 'failure' | 'error',
     description: string,
   ) {
+    if (!headSha) {
+      this.logger.warn('Skipping commit status update: headSha is not provided');
+      return;
+    }
     const octokit = new Octokit({ auth: githubToken });
     const frontendUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3001';
 
