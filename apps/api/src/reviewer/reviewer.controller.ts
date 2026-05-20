@@ -184,6 +184,23 @@ export class ReviewerController {
     });
   }
 
+  @Get('repo/:repoName/pr/:prNumber/status')
+  async getStatusByPr(
+    @Param('repoName') repoName: string,
+    @Param('prNumber') prNumber: string,
+  ) {
+    const analysis = await this.prisma.analysis.findFirst({
+      where: { repoName, prNumber: parseInt(prNumber, 10) },
+      orderBy: { createdAt: 'desc' },
+      select: { 
+        status: true,
+        models: true,
+        createdAt: true,
+      },
+    });
+    return analysis || { status: 'not_found' };
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get('settings')
   async getSettings(@Request() req) {
