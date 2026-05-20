@@ -238,6 +238,7 @@ export default function DashboardPage() {
         title: selectedPr.title,
         owner: selectedRepo.owner.login,
         models: selectedModels,
+        headSha: (selectedPr as any).headSha,
       })
       setCurrentAnalysisId(result.id)
       setShowModelSelection(false)
