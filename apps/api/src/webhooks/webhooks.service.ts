@@ -94,7 +94,48 @@ export class WebhooksService {
 
     if (!pr || !repo) return;
 
-    // We only care about opened, synchronized, or reopened PRs
+    // Handle PR closed event to stop active reviews
+    if (event === 'closed') {
+      this.logger.log(`PR closed for ${repo.full_name} PR #${pr.number}. Stopping any active analysis.`);
+      
+      const updated = await this.prisma.analysis.updateMany({
+        where: {
+          repoName: repo.name,
+          prNumber: pr.number,
+          status: { in: ['pending', 'in_progress'] }
+        },
+        data: {
+          status: 'stopped',
+          summary: 'The AI analysis has been stopped because the pull request has been closed.'
+        }
+      });
+      
+      this.logger.log(`Stopped ${updated.count} active analyses for PR #${pr.number}`);
+      
+      // Update GitHub commit status to indicate the analysis was stopped
+      try {
+        const repoRecord = await this.prisma.repository.findFirst({
+          where: { name: repo.name, owner: repo.owner.login },
+        });
+        if (repoRecord) {
+          const githubToken = await this.getUserGithubToken(repoRecord.userId);
+          await this.reviewerService.updateCommitStatus(
+            githubToken,
+            repo.owner.login,
+            repo.name,
+            pr.head.sha,
+            'failure',
+            'AI Analysis stopped - Pull request closed.',
+          );
+        }
+      } catch (err: any) {
+        this.logger.error(`Failed to update commit status on PR close: ${err.message}`);
+      }
+      
+      return { status: 'stopped' };
+    }
+
+    // We only care about opened, synchronized, or reopened PRs for reviews
     if (event !== 'opened' && event !== 'synchronize' && event !== 'reopened') {
       this.logger.log(`Ignoring PR event: ${event}`);
       return;
