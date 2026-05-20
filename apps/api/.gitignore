@@ -45,3 +45,4 @@ prisma/*.db-journal
 .cache/
 temp/
 tmp/
+scratch/

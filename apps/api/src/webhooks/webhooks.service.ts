@@ -175,13 +175,11 @@ export class WebhooksService {
       this.logger.warn(`Failed to set initial commit status check: ${err.message}`);
     }
 
-    // Return immediately to satisfy GitHub's 10s timeout
-    // and run the analysis in the background
-    this.processBackgroundAnalysis(repo, pr, repoRecord, githubToken, event, payload).catch(err => {
-      this.logger.error(`Background analysis failed: ${err.message}`);
-    });
+    // Await the background analysis execution to prevent Vercel from freezing the serverless function
+    await this.processBackgroundAnalysis(repo, pr, repoRecord, githubToken, event, payload);
 
     return { status: 'processing' };
+
   }
 
   /**
