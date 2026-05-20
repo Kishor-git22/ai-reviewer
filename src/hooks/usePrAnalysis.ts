@@ -220,13 +220,7 @@ export function useUpdateSettings() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (data: {
-      codeReviewModel?: string
-      securityModel?: string
-      scoringModel?: string
-      referenceModel?: string
-      selectedModels?: string[]
-    }) => {
+    mutationFn: async (data: { selectedModels: string[] }) => {
       const response = await fetch(`${API_URL}/reviewer/settings`, {
         method: 'PATCH',
         headers: {

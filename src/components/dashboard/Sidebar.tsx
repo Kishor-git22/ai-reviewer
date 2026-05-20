@@ -111,28 +111,20 @@ export function DashboardSidebar({ children }: SidebarProps) {
                       </Badge>
                     </div>
                     <div className="space-y-2">
-                      {[
-                        { id: settings?.codeReviewModel || 'llama-3.1', label: 'Review' },
-                        { id: settings?.securityModel || 'deepseek-v4-pro', label: 'Security' },
-                        { id: settings?.scoringModel || 'mistral-medium-3.5', label: 'Score' },
-                        { id: settings?.referenceModel || 'phi-4', label: 'Reference' }
-                      ].map((item, i) => {
-                        const colors = ['text-blue-400', 'text-purple-400', 'text-yellow-400', 'text-green-400'];
-                        const displayName = item.id.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                      {settings?.selectedModels?.map((mid: string, i: number) => {
+                        const colors = ['text-blue-400', 'text-purple-400', 'text-yellow-400'];
                         return (
-                          <div key={item.id + i} className="flex items-center justify-between gap-2 rounded-xl bg-background/40 p-1.5 transition-all hover:bg-background/60">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <Cpu className={cn("h-3 w-3 shrink-0", colors[i])} />
-                              <span className="truncate text-[9px] font-bold text-foreground">
-                                {displayName}
-                              </span>
-                            </div>
-                            <span className="text-[7px] font-black uppercase tracking-wider text-muted-foreground px-1 bg-accent/35 rounded-md border border-border/20 shrink-0">
-                              {item.label}
+                          <div key={mid} className="flex items-center gap-2.5 rounded-xl bg-background/40 p-1.5 transition-all hover:bg-background/60">
+                            <Cpu className={cn("h-3 w-3", colors[i % 3])} />
+                            <span className="truncate text-[9px] font-bold">
+                              {mid.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
                             </span>
                           </div>
                         )
                       })}
+                      {!settings?.selectedModels?.length && [1, 2, 3].map(i => (
+                        <div key={i} className="h-6 animate-pulse rounded-xl bg-background/20" />
+                      ))}
                     </div>
                   </div>
                 </div>
