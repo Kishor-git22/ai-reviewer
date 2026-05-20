@@ -111,13 +111,25 @@ export class ReviewerController {
     @Param('repoName') repoName: string,
     @Param('prNumber') prNumber: string,
   ) {
-    const analysis = await this.prisma.analysis.findFirst({
+    let analysis = await this.prisma.analysis.findFirst({
       where: { repoName, prNumber: parseInt(prNumber, 10) },
       orderBy: { createdAt: 'desc' },
       include: { findings: true },
     });
 
     if (!analysis) return null;
+
+    // Fallback to the latest completed analysis if the latest one is stopped or failed
+    if (analysis.status === 'stopped' || analysis.status === 'failed') {
+      const completedAnalysis = await this.prisma.analysis.findFirst({
+        where: { repoName, prNumber: parseInt(prNumber, 10), status: 'completed' },
+        orderBy: { createdAt: 'desc' },
+        include: { findings: true },
+      });
+      if (completedAnalysis) {
+        analysis = completedAnalysis;
+      }
+    }
 
     if (analysis.status === 'in_progress' || analysis.status === 'pending') {
       try {

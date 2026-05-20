@@ -190,29 +190,17 @@ export class WebhooksService {
       const octokit = new Octokit({ auth: githubToken });
       let diff = '';
 
-      if (event === 'synchronize' && payload.before && payload.after) {
-        this.logger.log(`Fetching incremental diff between ${payload.before} and ${payload.after}`);
-        const { data: comparison } = await octokit.rest.repos.compareCommits({
-          owner: repo.owner.login,
-          repo: repo.name,
-          base: payload.before,
-          head: payload.after,
-          headers: {
-            accept: 'application/vnd.github.v3.diff',
-          },
-        });
-        diff = comparison as any;
-      } else {
-        const { data: fullDiff } = await octokit.rest.pulls.get({
-          owner: repo.owner.login,
-          repo: repo.name,
-          pull_number: pr.number,
-          headers: {
-            accept: 'application/vnd.github.v3.diff',
-          },
-        });
-        diff = fullDiff as any;
-      }
+      // Always fetch the full PR diff to ensure all files in the PR are reviewed and commented
+      this.logger.log(`Fetching full PR diff for PR #${pr.number}`);
+      const { data: fullDiff } = await octokit.rest.pulls.get({
+        owner: repo.owner.login,
+        repo: repo.name,
+        pull_number: pr.number,
+        headers: {
+          accept: 'application/vnd.github.v3.diff',
+        },
+      });
+      diff = fullDiff as any;
 
       // 3. Trigger the analysis debate
       await this.reviewerService.performDebateReview(

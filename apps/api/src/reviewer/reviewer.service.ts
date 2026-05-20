@@ -268,19 +268,23 @@ export class ReviewerService {
       // 4. Store findings and update analysis
       await this.prisma.$transaction([
         this.prisma.finding.createMany({
-          data: referenceFindings.map((f: any) => ({
-            analysisId: analysis.id,
-            file: f.file,
-            line: f.line,
-            issue: f.issue,
-            type: f.type,
-            confidence: f.confidence,
-            rationale: f.rationale,
-            resolution: f.resolution,
-            reference: f.reference,
-            commitSha: headSha,
-            models: activeModels,
-          })),
+          data: referenceFindings.map((f: any) => {
+            const lineNum = typeof f.line === 'number' ? f.line : parseInt(f.line, 10);
+            return {
+              analysisId: analysis.id,
+              file: String(f.file || 'unknown'),
+              line: isNaN(lineNum) ? 1 : lineNum,
+              issue: String(f.issue || 'Potential issue'),
+              type: String(f.type || 'Warning'),
+              confidence: String(f.confidence || 'Medium'),
+              consensus: f.consensus === true || f.consensus === 'true',
+              rationale: String(f.rationale || ''),
+              resolution: String(f.resolution || ''),
+              reference: f.reference ? String(f.reference) : null,
+              commitSha: headSha,
+              models: Array.isArray(f.models) ? f.models.map(String) : (Array.isArray(activeModels) ? activeModels.map(String) : []),
+            };
+          }),
         }),
         this.prisma.analysis.update({
           where: { id: analysis.id },
@@ -737,7 +741,8 @@ Return your response in strict JSON format:
    */
   private safeJsonParse(content: string): any {
     try {
-      return JSON.parse(content);
+      const parsed = JSON.parse(content);
+      return this.normalizeParsedJson(parsed);
     } catch (e) {
       this.logger.warn(`JSON parse failed, attempting recovery...`);
       this.logger.debug(`Malformed JSON snippet: ${content.substring(0, 100)}...`);
@@ -753,12 +758,10 @@ Return your response in strict JSON format:
       // 2. Remove markdown code blocks
       fixed = fixed.replace(/^```json\s*/, '').replace(/```$/, '');
 
-      // 3. Fix unescaped quotes inside string values
-      // This looks for "key": "value "with" quotes"
-      // We look for quotes that are NOT followed by , } ] or : and are NOT preceded by \
-      fixed = fixed.replace(/:(?:\s*)"(.*?)",?(\s*[}\]])/gs, (match, p1, p2) => {
+      // 3. Fix unescaped quotes inside string values (property-by-property)
+      fixed = fixed.replace(/:\s*"(.*?)"(?=\s*(?:,\s*"[a-zA-Z0-9_-]+"\s*:|\s*[}\]]))/gs, (match, p1) => {
         const sanitized = p1.replace(/(?<!\\)"/g, '\\"');
-        return `: "${sanitized}"${p2}`;
+        return `: "${sanitized}"`;
       });
 
       // 4. Handle unquoted or single-quoted keys/values
@@ -775,7 +778,6 @@ Return your response in strict JSON format:
       });
 
       // 7. Clean up commas
-      // 7. Clean up commas
       fixed = fixed.replace(/,(\s*[\]}])/g, '$1');
       fixed = fixed.replace(/\}\s*\{/g, '},{');
       fixed = fixed.replace(/\]\s*\{/g, '],{');
@@ -785,19 +787,15 @@ Return your response in strict JSON format:
       fixed = fixed.replace(/\}\s*,\s*"(findings|qualityScore|securityScore|summary)"\s*:/g, ', "$1":');
 
       // 9. Fix literal newlines inside strings (very common failure)
-      // This regex looks for content between quotes and replaces actual newlines with \n
       fixed = fixed.replace(/"([^"\\]*(\\.[^"\\]*)*)"/g, (match) => {
         return match.replace(/\n/g, '\\n').replace(/\r/g, '\\r');
       });
 
-      // 10. Fix backslashes escaping the closing quote: \" -> \\"
-      // Often models do "file\": \"name.ts\" which breaks the string
-      fixed = fixed.replace(/\\"/g, '\\\\"').replace(/\\\\\\\\"/g, '\\\\"'); // Normalize to \\"
-      fixed = fixed.replace(/([^\\@])\\"/g, '$1\\\\"'); // Ensure quote is escaped with double backslash if not already
+      // 10. Fix backslashes that escape structural quotes (e.g. \"key\" or \"value\")
+      fixed = fixed.replace(/(?<=[:\{\[,])\s*\\"/g, '"');
+      fixed = fixed.replace(/\\"\s*(?=[\]\},:])/g, '"');
 
       // 11. Discard trailing "babble" (text after the last root brace)
-
-      // 9. Discard trailing "babble" (text after the last root brace)
       const rootOpenIndex = fixed.indexOf('{');
       if (rootOpenIndex !== -1) {
         let depth = 0;
@@ -815,7 +813,7 @@ Return your response in strict JSON format:
         }
       }
 
-      // 8. JSON Balancer: Auto-close truncated objects/arrays
+      // 12. JSON Balancer: Auto-close truncated objects/arrays
       let braceCount = 0;
       let bracketCount = 0;
       let inString = false;
@@ -833,24 +831,89 @@ Return your response in strict JSON format:
       while (braceCount > 0) { fixed += '}'; braceCount--; }
 
       try {
-        return JSON.parse(fixed);
+        const parsed = JSON.parse(fixed);
+        return this.normalizeParsedJson(parsed);
       } catch (e2) {
         this.logger.error(`JSON recovery failed: ${e2.message}`);
         this.logger.debug(`Attempted fix: ${fixed}`);
         
-        // Final fallback: Regex extraction for critical fields
+        // Final fallback: Regex extraction for findings and critical fields
+        const findings: any[] = [];
+        // Extract flexible finding objects matching file and issue
+        const flexibleRegex = /\{\s*"file"\s*:\s*"([^"]+)"\s*,[^}]*?"issue"\s*:\s*"([^"]+)"[^}]*?\}/g;
+        let match;
+        while ((match = flexibleRegex.exec(content)) !== null) {
+          try {
+            const individual = JSON.parse(match[0]);
+            if (individual.file && individual.issue) {
+              findings.push({
+                file: individual.file,
+                line: typeof individual.line === 'number' ? individual.line : 1,
+                issue: individual.issue,
+                type: individual.type || 'Warning',
+                confidence: individual.confidence || 'Medium',
+                rationale: individual.rationale || '',
+                resolution: individual.resolution || '',
+                reference: individual.reference || undefined
+              });
+            }
+          } catch (err) {}
+        }
+
         const qualityMatch = content.match(/"qualityScore":\s*(\d+)/);
         const securityMatch = content.match(/"securityScore":\s*(\d+)/);
         const summaryMatch = content.match(/"summary":\s*"([^"]+)"/);
         
         return {
-          findings: [],
+          findings,
           qualityScore: qualityMatch ? parseInt(qualityMatch[1], 10) : 0,
           securityScore: securityMatch ? parseInt(securityMatch[1], 10) : 0,
-          summary: summaryMatch ? summaryMatch[1] : 'Critical: AI generated invalid JSON. Please check logs.'
+          summary: summaryMatch ? summaryMatch[1] : 'Critical: AI generated invalid JSON. Extracted findings via regex.'
         };
       }
     }
+  }
+
+  /**
+   * Helper to normalize dynamic LLM response keys to standard "findings"
+   */
+  private normalizeParsedJson(parsed: any): any {
+    if (parsed && typeof parsed === 'object') {
+      // Normalize casing of "findings"
+      const findingsKey = Object.keys(parsed).find(k => k.toLowerCase() === 'findings');
+      if (findingsKey && findingsKey !== 'findings') {
+        parsed.findings = parsed[findingsKey];
+        delete parsed[findingsKey];
+      }
+      
+      // Map other common variations (security_issues, issues, violations, errors) to findings
+      if (!parsed.findings) {
+        const alternativeKey = Object.keys(parsed).find(k => 
+          k.toLowerCase() === 'security_issues' || 
+          k.toLowerCase() === 'issues' || 
+          k.toLowerCase() === 'violations' ||
+          k.toLowerCase() === 'errors'
+        );
+        if (alternativeKey && Array.isArray(parsed[alternativeKey])) {
+          parsed.findings = parsed[alternativeKey];
+        }
+      }
+      
+      // Ensure findings is always an array
+      if (parsed.findings && !Array.isArray(parsed.findings)) {
+        parsed.findings = [parsed.findings];
+      }
+      
+      // If the top-level object itself is a raw array, wrap it in a findings object
+      if (!parsed.findings && Array.isArray(parsed)) {
+        return { findings: parsed };
+      }
+
+      if (!parsed.findings) {
+        parsed.findings = [];
+      }
+    }
+    return parsed;
   }
 
   /**

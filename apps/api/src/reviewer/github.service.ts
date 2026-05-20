@@ -175,7 +175,11 @@ export class GithubService {
         });
       }
     } catch (error: any) {
-      this.logger.error(`Failed to manage check run: ${error.message}`);
+      if (error.message?.includes('authenticate via a GitHub App') || error.status === 403) {
+        this.logger.debug(`Skipping Check Run management: requires GitHub App integration (OAuth / PAT used). Status fallback is active.`);
+      } else {
+        this.logger.error(`Failed to manage check run: ${error.message}`);
+      }
     }
   }
 }
