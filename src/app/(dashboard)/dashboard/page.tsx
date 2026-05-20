@@ -284,7 +284,13 @@ export default function DashboardPage() {
           </div>
           <p className="text-sm font-bold text-muted-foreground">
             {currentAnalysisId 
-              ? `Multi-agent debate in progress for #${(selectedPr as any).number}`
+              ? (analysis?.status === 'completed' || (analysisHistory && analysisHistory.some(a => a.status === 'completed')))
+                ? `Comprehensive analysis for PR #${(selectedPr as any).number}`
+                : analysis?.status === 'stopped'
+                  ? `Analysis stopped for PR #${(selectedPr as any).number}`
+                  : analysis?.status === 'failed'
+                    ? `Analysis failed for PR #${(selectedPr as any).number}`
+                    : `Multi-agent debate in progress for #${(selectedPr as any).number}`
               : selectedPr 
                 ? 'Configure your AI agents for this review.'
                 : selectedRepo 
