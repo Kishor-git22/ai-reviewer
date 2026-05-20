@@ -15,12 +15,7 @@ model User {
   email      String?  @map("email")
   githubToken String? @map("github_token")
   selectedModels String[] @default(["llama-3.1", "deepseek-v4-pro", "mistral-medium-3.5"]) @map("selected_models")
-  codeReviewModel String @default("llama-3.1") @map("code_review_model")
-  securityModel   String @default("deepseek-v4-pro") @map("security_model")
-  scoringModel    String @default("mistral-medium-3.5") @map("scoring_model")
-  referenceModel  String @default("phi-4") @map("reference_model")
   createdAt  DateTime @default(now()) @map("created_at")
-
   updatedAt  DateTime @updatedAt @map("updated_at")
 
   analyses   Analysis[]

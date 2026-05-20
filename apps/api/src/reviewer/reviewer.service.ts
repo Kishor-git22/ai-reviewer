@@ -73,7 +73,7 @@ export class ReviewerService {
     return new OpenAI({
       baseURL: 'https://integrate.api.nvidia.com/v1',
       apiKey,
-      timeout: 90000, // 90 seconds
+      timeout: 900000, // 15 minutes
     });
   }
 
@@ -89,7 +89,11 @@ export class ReviewerService {
     githubToken: string,
     owner: string,
     headSha: string,
-    selectedModels?: string[],
+    selectedModels: string[] = [
+      'llama-3.1',
+      'deepseek-v4-flash',
+      'mistral-small-4',
+    ],
   ) {
     // 0. Check if an analysis is already in progress for this PR
     const existingAnalysis = await this.prisma.analysis.findFirst({
@@ -105,41 +109,10 @@ export class ReviewerService {
       await this.prisma.analysis.update({
         where: { id: existingAnalysis.id },
         data: { status: 'failed' }
-      }).catch(() => {});
+      });
     }
 
-    // Fetch user configurations
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        codeReviewModel: true,
-        securityModel: true,
-        scoringModel: true,
-        referenceModel: true,
-      },
-    });
-
-    let codeReviewModel = user?.codeReviewModel || 'llama-3.1';
-    let securityModel = user?.securityModel || 'deepseek-v4-pro';
-    let scoringModel = user?.scoringModel || 'mistral-medium-3.5';
-    let referenceModel = user?.referenceModel || 'phi-4';
-
-    // Map if selectedModels was explicitly supplied (e.g. from client call or webhook)
-    if (selectedModels && selectedModels.length === 4) {
-      codeReviewModel = selectedModels[0];
-      securityModel = selectedModels[1];
-      scoringModel = selectedModels[2];
-      referenceModel = selectedModels[3];
-    } else if (selectedModels && selectedModels.length === 3) {
-      codeReviewModel = selectedModels[0];
-      securityModel = selectedModels[1];
-      scoringModel = selectedModels[2];
-    }
-
-    const activeModels = [codeReviewModel, securityModel, scoringModel, referenceModel];
-
-    this.logger.log(`Starting upgraded AI pipeline review for ${repoName} PR #${prNumber}`);
-    this.logger.log(`Models: CodeReview=${codeReviewModel}, Security=${securityModel}, Scoring=${scoringModel}, Reference=${referenceModel}`);
+    this.logger.log(`Starting debate review for ${repoName} PR #${prNumber} with models: ${selectedModels.join(', ')}`);
     this.logger.log(`Diff size: ${diff.length} characters`);
 
     // Truncate diff if it's too large to prevent 504 timeouts
@@ -157,102 +130,95 @@ export class ReviewerService {
         prNumber,
         title,
         status: 'in_progress',
-        models: activeModels,
+        models: selectedModels,
       },
     });
 
     try {
-      // Stage 1 status
+      // Set initial progress
       await this.githubService.updateCommitStatus(
         githubToken,
         owner,
         repoName,
         headSha,
         'pending',
-        'Stage 1/2: Running Code Review & Security analysis... 30%',
+        'AI Agents are analyzing the code... 15%',
       );
 
-      // Run Stage 1 Agents in parallel
-      const [codeReviewRes, securityRes] = await Promise.all([
-        (async () => {
+      // 2. Run analysis across 3 agents with independent error handling
+      const agentResults = await Promise.all(
+        selectedModels.map(async (model) => {
           try {
-            const res = await this.getCodeReviewAgent(codeReviewModel, processedDiff);
-            return res.findings || [];
+            const response = await this.getAgentReview(model, processedDiff);
+            return { model, status: 'success', response };
           } catch (e: any) {
-            this.logger.error(`Code review agent (${codeReviewModel}) failed: ${e.message}`);
-            return [];
+            this.logger.error(`Agent review for ${model} failed: ${e.message}`);
+            return { model, status: 'failed', error: e.message };
           }
-        })(),
-        (async () => {
-          try {
-            const res = await this.getSecurityAgent(securityModel, processedDiff);
-            return res.findings || [];
-          } catch (e: any) {
-            this.logger.error(`Security agent (${securityModel}) failed: ${e.message}`);
-            return [];
-          }
-        })(),
-      ]);
+        })
+      );
 
-      const combinedFindings = [...codeReviewRes, ...securityRes];
+      const successfulResponses = agentResults
+        .filter(r => r.status === 'success')
+        .map(r => r.response);
 
-      // Check if stopped before starting Stage 2
+      if (successfulResponses.length === 0) {
+        throw new Error('All AI agents failed to respond. Please check your API keys or try again later.');
+      }
+
+      // Check if stopped before starting synthesis
       let checkAnalysis = await this.prisma.analysis.findUnique({
         where: { id: analysis.id },
         select: { status: true },
       });
       if (checkAnalysis?.status === 'stopped') {
-        this.logger.log(`Analysis ${analysis.id} was stopped. Aborting review.`);
+        this.logger.log(`Analysis ${analysis.id} was stopped. Aborting debate review.`);
         return analysis.id;
       }
 
-      // Stage 2 status
       await this.githubService.updateCommitStatus(
         githubToken,
         owner,
         repoName,
         headSha,
         'pending',
-        'Stage 2/2: Scoring PR and generating references... 70%',
+        `Agents are debating consensus (${successfulResponses.length}/3)... 65%`,
       );
 
-      // Run Stage 2 Agents in parallel
-      const [referenceFindings, scoreRes] = await Promise.all([
-        (async () => {
-          try {
-            const res = await this.getReferenceAgent(referenceModel, combinedFindings);
-            return res.findings || combinedFindings;
-          } catch (e: any) {
-            this.logger.error(`Reference agent (${referenceModel}) failed: ${e.message}`);
-            return combinedFindings;
-          }
-        })(),
-        (async () => {
-          try {
-            const res = await this.getScoringAgent(scoringModel, processedDiff, combinedFindings);
-            return {
-              qualityScore: res.qualityScore !== undefined ? res.qualityScore : 85,
-              securityScore: res.securityScore !== undefined ? res.securityScore : 90,
-              summary: res.summary || 'Code analysis completed successfully.'
-            };
-          } catch (e: any) {
-            this.logger.error(`Scoring agent (${scoringModel}) failed: ${e.message}`);
-            return {
-              qualityScore: 85,
-              securityScore: 90,
-              summary: 'Code analysis completed successfully (scoring fallback).'
-            };
-          }
-        })(),
-      ]);
+      // 3. Perform Consensus synthesis (Agent Debate) with fallback lead models
+      let synthesis: AIReviewResult | null = null;
+      let lastSynthesisError: Error | null = null;
+      
+      // Filter models that successfully provided initial reviews
+      const candidateLeads = agentResults
+        .filter(r => r.status === 'success')
+        .map(r => r.model);
 
-      // Check if stopped before database update
+      for (const leadModel of candidateLeads) {
+        try {
+          this.logger.log(`Attempting consensus synthesis with lead model: ${leadModel}`);
+          synthesis = await this.synthesizeConsensus(leadModel, successfulResponses, processedDiff);
+          if (synthesis) break;
+        } catch (e: any) {
+          this.logger.warn(`Synthesis with lead ${leadModel} failed: ${e.message}. Trying next candidate...`);
+          lastSynthesisError = e;
+        }
+      }
+
+      if (!synthesis) {
+        this.logger.error('All candidate lead models failed synthesis debate.');
+        // Fallback: Naive synthesis (just merge all unique findings)
+        synthesis = this.naiveSynthesis(successfulResponses);
+        this.logger.warn('Proceeding with Naive Synthesis fallback.');
+      }
+
+      // Check if stopped before updating database
       checkAnalysis = await this.prisma.analysis.findUnique({
         where: { id: analysis.id },
         select: { status: true },
       });
       if (checkAnalysis?.status === 'stopped') {
-        this.logger.log(`Analysis ${analysis.id} was stopped. Aborting database save.`);
+        this.logger.log(`Analysis ${analysis.id} was stopped. Aborting final updates.`);
         return analysis.id;
       }
 
@@ -268,39 +234,28 @@ export class ReviewerService {
       // 4. Store findings and update analysis
       await this.prisma.$transaction([
         this.prisma.finding.createMany({
-          data: referenceFindings.map((f: any) => {
-            const lineNum = typeof f.line === 'number' ? f.line : parseInt(f.line, 10);
-            return {
-              analysisId: analysis.id,
-              file: String(f.file || 'unknown'),
-              line: isNaN(lineNum) ? 1 : lineNum,
-              issue: String(f.issue || 'Potential issue'),
-              type: String(f.type || 'Warning'),
-              confidence: String(f.confidence || 'Medium'),
-              consensus: f.consensus === true || f.consensus === 'true',
-              rationale: String(f.rationale || ''),
-              resolution: String(f.resolution || ''),
-              reference: f.reference ? String(f.reference) : null,
-              commitSha: headSha,
-              models: Array.isArray(f.models) ? f.models.map(String) : (Array.isArray(activeModels) ? activeModels.map(String) : []),
-            };
-          }),
+          data: synthesis.findings.map((f) => ({
+            analysisId: analysis.id,
+            file: f.file,
+            line: f.line,
+            issue: f.issue,
+            type: f.type,
+            confidence: f.confidence,
+            rationale: f.rationale,
+            resolution: f.resolution,
+            reference: f.reference,
+            commitSha: headSha,
+            models: selectedModels,
+          })),
         }),
         this.prisma.analysis.update({
           where: { id: analysis.id },
           data: {
             status: 'completed',
-            qualityScore: scoreRes.qualityScore,
-            securityScore: scoreRes.securityScore,
-            summary: scoreRes.summary,
-            debateLog: {
-              agents: [
-                { role: 'code-review', model: codeReviewModel, findingsCount: codeReviewRes.length },
-                { role: 'security', model: securityModel, findingsCount: securityRes.length },
-                { role: 'scoring', model: scoringModel },
-                { role: 'reference', model: referenceModel }
-              ]
-            } as any,
+            qualityScore: synthesis.qualityScore,
+            securityScore: synthesis.securityScore,
+            summary: synthesis.summary,
+            debateLog: { agents: agentResults } as any,
           },
         }),
       ]);
@@ -313,7 +268,7 @@ export class ReviewerService {
       );
 
       // Filter findings to only those that apply to valid paths in the diff
-      const validFindings = referenceFindings.filter((f: any) => validPaths.has(f.file));
+      const validFindings = synthesis.findings.filter((f) => validPaths.has(f.file));
 
       if (validFindings.length > 0) {
         this.logger.log(`Posting ${validFindings.length} valid inline review comments...`);
@@ -332,9 +287,9 @@ export class ReviewerService {
           owner,
           repoName,
           prNumber,
-          referenceFindings.length,
-          scoreRes.qualityScore,
-          scoreRes.securityScore,
+          synthesis.findings.length,
+          synthesis.qualityScore,
+          synthesis.securityScore,
         );
       }
 
@@ -345,12 +300,12 @@ export class ReviewerService {
         repoName,
         headSha,
         'success',
-        `AI Review complete (Quality: ${scoreRes.qualityScore}%, Security: ${scoreRes.securityScore}%)`,
+        'AI Analysis Complete! 100% Done.',
       );
 
       return analysis.id;
-    } catch (error: any) {
-      this.logger.error(`Error during AI pipeline review: ${error.message}`);
+    } catch (error) {
+      this.logger.error(`Analysis failed for PR #${prNumber}: ${error.message}`);
       
       const checkAnalysis = await this.prisma.analysis.findUnique({
         where: { id: analysis.id },
@@ -365,7 +320,7 @@ export class ReviewerService {
       await this.prisma.analysis.update({
         where: { id: analysis.id },
         data: { status: 'failed' },
-      }).catch(() => {});
+      });
 
       // Update GitHub with error status
       await this.githubService.updateCommitStatus(
@@ -375,173 +330,10 @@ export class ReviewerService {
         headSha,
         'error',
         `Analysis failed: ${error.message.substring(0, 50)}...`,
-      ).catch(() => {});
+      );
 
       throw error;
     }
-  }
-
-  private async getCodeReviewAgent(modelId: string, diff: string) {
-    const client = this.getClient(modelId);
-    const model = this.MODEL_MAPPING[modelId] || modelId;
-    const prompt = `You are a Senior Code Quality and Performance Engineer.
-Review the following code diff and identify general code quality issues, clean code violations, performance bottlenecks, and architectural issues.
-DO NOT review for security vulnerabilities or OWASP Top 10 issues.
-
-CODE DIFF:
-${diff}
-
-IMPORTANT: Your response must be STABLE, VALID JSON.
-1. Use double quotes for all keys and strings.
-2. ESCAPE all backslashes as \\\\ and double quotes as \\\".
-3. Do NOT use literal newlines inside strings.
-4. DO NOT use markdown tables, bullet points, or any other formatting.
-5. Output ONLY the raw JSON object. Do not include any preamble, postamble, or explanation.
-6. The response MUST start with { and end with }.
-
-Return your response in strict JSON format:
-{
-  "findings": [
-    { "file": "string", "line": number, "issue": "string", "type": "Warning|Info", "confidence": "High|Medium|Low", "rationale": "string", "resolution": "string" }
-  ]
-}`;
-
-    const completion = await this.callAI(client, model, prompt, modelId);
-    const cleanContent = this.extractJsonBlock(completion);
-    return this.safeJsonParse(cleanContent);
-  }
-
-  private async getSecurityAgent(modelId: string, diff: string) {
-    const client = this.getClient(modelId);
-    const model = this.MODEL_MAPPING[modelId] || modelId;
-    const prompt = `You are a Senior Security Engineer.
-Review the following code diff and identify security vulnerabilities, injection risks, authentication flaws, or OWASP Top 10 issues.
-DO NOT review for general style, performance, or clean code issues.
-
-CODE DIFF:
-${diff}
-
-IMPORTANT: Your response must be STABLE, VALID JSON.
-1. Use double quotes for all keys and strings.
-2. ESCAPE all backslashes as \\\\ and double quotes as \\\".
-3. Do NOT use literal newlines inside strings.
-4. DO NOT use markdown tables, bullet points, or any other formatting.
-5. Output ONLY the raw JSON object. Do not include any preamble, postamble, or explanation.
-6. The response MUST start with { and end with }.
-
-Return your response in strict JSON format:
-{
-  "findings": [
-    { "file": "string", "line": number, "issue": "string", "type": "Critical|Vulnerability", "confidence": "High|Medium|Low", "rationale": "string", "resolution": "string" }
-  ]
-}`;
-
-    const completion = await this.callAI(client, model, prompt, modelId);
-    const cleanContent = this.extractJsonBlock(completion);
-    return this.safeJsonParse(cleanContent);
-  }
-
-  private async getReferenceAgent(modelId: string, findings: any[]) {
-    if (!findings || findings.length === 0) {
-      return { findings: [] };
-    }
-    const client = this.getClient(modelId);
-    const model = this.MODEL_MAPPING[modelId] || modelId;
-    const prompt = `You are a Senior Documentation and Compliance Expert.
-You are given a list of code issues and security vulnerabilities found in a code change.
-For each finding, provide an appropriate online reference URL (e.g., OWASP Top 10 link, CWE database link, official language/library documentation, or MDN docs) that explains the issue or its resolution.
-
-FINDINGS:
-${JSON.stringify(findings, null, 2)}
-
-IMPORTANT: Your response must be STABLE, VALID JSON.
-1. Use double quotes for all keys and strings.
-2. ESCAPE all backslashes as \\\\ and double quotes as \\\".
-3. Do NOT use literal newlines inside strings.
-4. DO NOT use markdown tables, bullet points, or any other formatting.
-5. Output ONLY the raw JSON object. Do not include any preamble, postamble, or explanation.
-6. The response MUST start with { and end with }.
-
-Return your response in strict JSON format:
-{
-  "findings": [
-    { "file": "string", "line": number, "issue": "string", "type": "string", "confidence": "string", "rationale": "string", "resolution": "string", "reference": "URL (OWASP, CWE, or documentation link)" }
-  ]
-}`;
-
-    const completion = await this.callAI(client, model, prompt, modelId);
-    const cleanContent = this.extractJsonBlock(completion);
-    return this.safeJsonParse(cleanContent);
-  }
-
-  private async getScoringAgent(modelId: string, diff: string, findings: any[]) {
-    const client = this.getClient(modelId);
-    const model = this.MODEL_MAPPING[modelId] || modelId;
-    const prompt = `You are a Senior Quality Gate Auditor.
-Given the original code diff and the list of identified quality/security findings, evaluate the overall health of the pull request.
-Calculate:
-1. "qualityScore" (0-100): 100 means perfect code quality. Deduct points based on the severity of non-security quality findings.
-2. "securityScore" (0-100): 100 means no security vulnerabilities. Deduct points heavily for Critical or Vulnerability findings.
-3. "summary": A brief, high-level summary of the review findings, highlighting main concerns or giving a clean pass message.
-
-CODE DIFF:
-${diff}
-
-FINDINGS:
-${JSON.stringify(findings, null, 2)}
-
-IMPORTANT: Your response must be STABLE, VALID JSON.
-1. Use double quotes for all keys and strings.
-2. ESCAPE all backslashes as \\\\ and double quotes as \\\".
-3. Do NOT use literal newlines inside strings.
-4. DO NOT use markdown tables, bullet points, or any other formatting.
-5. Output ONLY the raw JSON object. Do not include any preamble, postamble, or explanation.
-6. The response MUST start with { and end with }.
-
-Return your response in strict JSON format:
-{
-  "qualityScore": number,
-  "securityScore": number,
-  "summary": "string"
-}`;
-
-    const completion = await this.callAI(client, model, prompt, modelId);
-    const cleanContent = this.extractJsonBlock(completion);
-    return this.safeJsonParse(cleanContent);
-  }
-
-  private async callAI(client: any, model: string, prompt: string, modelId: string): Promise<string> {
-    let completion;
-    let retries = 2;
-    
-    while (retries >= 0) {
-      try {
-        completion = await client.chat.completions.create({
-          model,
-          messages: [
-            { role: 'system', content: 'You are a Senior Engineer. Output ONLY valid JSON. No markdown, no code blocks, no explanation. IMPORTANT: Escape all backslashes as \\\\ and ensure all newlines inside strings are escaped as \\n. The response MUST be a single parseable JSON object.' },
-            { role: 'user', content: prompt }
-          ],
-          max_tokens: 3000,
-          temperature: 0.1,
-        });
-        break;
-      } catch (error: any) {
-        const isConnectionError = error.message?.toLowerCase().includes('connection') || 
-                                 error.message?.toLowerCase().includes('timeout') ||
-                                 error.status === 504 ||
-                                 error.status === 502;
-        
-        if (isConnectionError && retries > 0) {
-          this.logger.warn(`Agent review for ${modelId} failed (${error.message}), retrying... (${retries} left)`);
-          retries--;
-          await new Promise(resolve => setTimeout(resolve, 5000));
-          continue;
-        }
-        throw error;
-      }
-    }
-    return completion.choices[0].message.content || '{}';
   }
 
   private async getAgentReview(modelId: string, diff: string) {
@@ -741,8 +533,7 @@ Return your response in strict JSON format:
    */
   private safeJsonParse(content: string): any {
     try {
-      const parsed = JSON.parse(content);
-      return this.normalizeParsedJson(parsed);
+      return JSON.parse(content);
     } catch (e) {
       this.logger.warn(`JSON parse failed, attempting recovery...`);
       this.logger.debug(`Malformed JSON snippet: ${content.substring(0, 100)}...`);
@@ -758,10 +549,12 @@ Return your response in strict JSON format:
       // 2. Remove markdown code blocks
       fixed = fixed.replace(/^```json\s*/, '').replace(/```$/, '');
 
-      // 3. Fix unescaped quotes inside string values (property-by-property)
-      fixed = fixed.replace(/:\s*"(.*?)"(?=\s*(?:,\s*"[a-zA-Z0-9_-]+"\s*:|\s*[}\]]))/gs, (match, p1) => {
+      // 3. Fix unescaped quotes inside string values
+      // This looks for "key": "value "with" quotes"
+      // We look for quotes that are NOT followed by , } ] or : and are NOT preceded by \
+      fixed = fixed.replace(/:(?:\s*)"(.*?)",?(\s*[}\]])/gs, (match, p1, p2) => {
         const sanitized = p1.replace(/(?<!\\)"/g, '\\"');
-        return `: "${sanitized}"`;
+        return `: "${sanitized}"${p2}`;
       });
 
       // 4. Handle unquoted or single-quoted keys/values
@@ -778,6 +571,7 @@ Return your response in strict JSON format:
       });
 
       // 7. Clean up commas
+      // 7. Clean up commas
       fixed = fixed.replace(/,(\s*[\]}])/g, '$1');
       fixed = fixed.replace(/\}\s*\{/g, '},{');
       fixed = fixed.replace(/\]\s*\{/g, '],{');
@@ -787,15 +581,19 @@ Return your response in strict JSON format:
       fixed = fixed.replace(/\}\s*,\s*"(findings|qualityScore|securityScore|summary)"\s*:/g, ', "$1":');
 
       // 9. Fix literal newlines inside strings (very common failure)
+      // This regex looks for content between quotes and replaces actual newlines with \n
       fixed = fixed.replace(/"([^"\\]*(\\.[^"\\]*)*)"/g, (match) => {
         return match.replace(/\n/g, '\\n').replace(/\r/g, '\\r');
       });
 
-      // 10. Fix backslashes that escape structural quotes (e.g. \"key\" or \"value\")
-      fixed = fixed.replace(/(?<=[:\{\[,])\s*\\"/g, '"');
-      fixed = fixed.replace(/\\"\s*(?=[\]\},:])/g, '"');
+      // 10. Fix backslashes escaping the closing quote: \" -> \\"
+      // Often models do "file\": \"name.ts\" which breaks the string
+      fixed = fixed.replace(/\\"/g, '\\\\"').replace(/\\\\\\\\"/g, '\\\\"'); // Normalize to \\"
+      fixed = fixed.replace(/([^\\@])\\"/g, '$1\\\\"'); // Ensure quote is escaped with double backslash if not already
 
       // 11. Discard trailing "babble" (text after the last root brace)
+
+      // 9. Discard trailing "babble" (text after the last root brace)
       const rootOpenIndex = fixed.indexOf('{');
       if (rootOpenIndex !== -1) {
         let depth = 0;
@@ -813,7 +611,7 @@ Return your response in strict JSON format:
         }
       }
 
-      // 12. JSON Balancer: Auto-close truncated objects/arrays
+      // 8. JSON Balancer: Auto-close truncated objects/arrays
       let braceCount = 0;
       let bracketCount = 0;
       let inString = false;
@@ -831,89 +629,24 @@ Return your response in strict JSON format:
       while (braceCount > 0) { fixed += '}'; braceCount--; }
 
       try {
-        const parsed = JSON.parse(fixed);
-        return this.normalizeParsedJson(parsed);
+        return JSON.parse(fixed);
       } catch (e2) {
         this.logger.error(`JSON recovery failed: ${e2.message}`);
         this.logger.debug(`Attempted fix: ${fixed}`);
         
-        // Final fallback: Regex extraction for findings and critical fields
-        const findings: any[] = [];
-        // Extract flexible finding objects matching file and issue
-        const flexibleRegex = /\{\s*"file"\s*:\s*"([^"]+)"\s*,[^}]*?"issue"\s*:\s*"([^"]+)"[^}]*?\}/g;
-        let match;
-        while ((match = flexibleRegex.exec(content)) !== null) {
-          try {
-            const individual = JSON.parse(match[0]);
-            if (individual.file && individual.issue) {
-              findings.push({
-                file: individual.file,
-                line: typeof individual.line === 'number' ? individual.line : 1,
-                issue: individual.issue,
-                type: individual.type || 'Warning',
-                confidence: individual.confidence || 'Medium',
-                rationale: individual.rationale || '',
-                resolution: individual.resolution || '',
-                reference: individual.reference || undefined
-              });
-            }
-          } catch (err) {}
-        }
-
+        // Final fallback: Regex extraction for critical fields
         const qualityMatch = content.match(/"qualityScore":\s*(\d+)/);
         const securityMatch = content.match(/"securityScore":\s*(\d+)/);
         const summaryMatch = content.match(/"summary":\s*"([^"]+)"/);
         
         return {
-          findings,
+          findings: [],
           qualityScore: qualityMatch ? parseInt(qualityMatch[1], 10) : 0,
           securityScore: securityMatch ? parseInt(securityMatch[1], 10) : 0,
-          summary: summaryMatch ? summaryMatch[1] : 'Critical: AI generated invalid JSON. Extracted findings via regex.'
+          summary: summaryMatch ? summaryMatch[1] : 'Critical: AI generated invalid JSON. Please check logs.'
         };
       }
     }
-  }
-
-  /**
-   * Helper to normalize dynamic LLM response keys to standard "findings"
-   */
-  private normalizeParsedJson(parsed: any): any {
-    if (parsed && typeof parsed === 'object') {
-      // Normalize casing of "findings"
-      const findingsKey = Object.keys(parsed).find(k => k.toLowerCase() === 'findings');
-      if (findingsKey && findingsKey !== 'findings') {
-        parsed.findings = parsed[findingsKey];
-        delete parsed[findingsKey];
-      }
-      
-      // Map other common variations (security_issues, issues, violations, errors) to findings
-      if (!parsed.findings) {
-        const alternativeKey = Object.keys(parsed).find(k => 
-          k.toLowerCase() === 'security_issues' || 
-          k.toLowerCase() === 'issues' || 
-          k.toLowerCase() === 'violations' ||
-          k.toLowerCase() === 'errors'
-        );
-        if (alternativeKey && Array.isArray(parsed[alternativeKey])) {
-          parsed.findings = parsed[alternativeKey];
-        }
-      }
-      
-      // Ensure findings is always an array
-      if (parsed.findings && !Array.isArray(parsed.findings)) {
-        parsed.findings = [parsed.findings];
-      }
-      
-      // If the top-level object itself is a raw array, wrap it in a findings object
-      if (!parsed.findings && Array.isArray(parsed)) {
-        return { findings: parsed };
-      }
-
-      if (!parsed.findings) {
-        parsed.findings = [];
-      }
-    }
-    return parsed;
   }
 
   /**
