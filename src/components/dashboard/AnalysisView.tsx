@@ -18,7 +18,6 @@ import {
   Cpu,
   RefreshCw,
   Loader2,
-  Link2,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -28,7 +27,6 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { AgentDebateLog } from './AgentDebateLog'
 import { Finding, PullRequest, FindingType, Analysis, BackendFinding } from '@/types'
 import { getFindingTypeColor, getConfidenceColor, cn } from '@/lib/utils'
-import { NVIDIA_MODELS } from './ModelSelector'
 
 interface AnalysisViewProps {
   pr: PullRequest
@@ -37,7 +35,7 @@ interface AnalysisViewProps {
   onBack: () => void
 }
 
-function FindingCard({ finding, analysisModels = [] }: { finding: BackendFinding; analysisModels?: string[] }) {
+function FindingCard({ finding }: { finding: BackendFinding }) {
   const isCritical = finding.type === 'Critical' || finding.type === 'Vulnerability'
   const isWarning = finding.type === 'Warning'
   
@@ -158,7 +156,7 @@ function FindingCard({ finding, analysisModels = [] }: { finding: BackendFinding
               </a>
             )}
 
-            <AgentDebateLog finding={finding as any} analysisModels={analysisModels}>
+            <AgentDebateLog finding={finding as any}>
               <Button variant="ghost" size="sm" className="h-8 gap-1.5 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-accent">
                 <MessageSquare className="h-3 w-3" />
                 Debate Log
@@ -174,13 +172,11 @@ function FindingCard({ finding, analysisModels = [] }: { finding: BackendFinding
 function CommitGroup({ 
   commitSha, 
   findings, 
-  isLatest,
-  analysisModels = []
+  isLatest 
 }: { 
   commitSha: string; 
   findings: BackendFinding[];
   isLatest?: boolean;
-  analysisModels?: string[];
 }) {
   const confirmed = findings.filter(f => f.consensus)
   const single = findings.filter(f => !f.consensus)
@@ -206,7 +202,7 @@ function CommitGroup({
           </h2>
           <div className="grid grid-cols-1 gap-4">
             {confirmed.map((finding) => (
-              <FindingCard key={finding.id} finding={finding} analysisModels={analysisModels} />
+              <FindingCard key={finding.id} finding={finding} />
             ))}
           </div>
         </div>
@@ -220,7 +216,7 @@ function CommitGroup({
           </h2>
           <div className="grid grid-cols-1 gap-4">
             {single.map((finding) => (
-              <FindingCard key={finding.id} finding={finding} analysisModels={analysisModels} />
+              <FindingCard key={finding.id} finding={finding} />
             ))}
           </div>
         </div>
@@ -258,19 +254,6 @@ export function AnalysisView({ pr, analysis, history = [], onBack }: AnalysisVie
 
   const totalFindingsCount = completedFindings.length
   const confirmedCount = completedFindings.filter(f => f.consensus).length
-
-  // Find the latest completed analysis to use its scores as a fallback if the active analysis is stopped/failed/in_progress
-  const latestCompletedAnalysis = allAnalyses
-    .filter(a => a.status === 'completed')
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
-
-  const displayQualityScore = analysis.qualityScore !== null && analysis.qualityScore !== undefined
-    ? analysis.qualityScore
-    : (latestCompletedAnalysis?.qualityScore ?? 0)
-
-  const displaySecurityScore = analysis.securityScore !== null && analysis.securityScore !== undefined
-    ? analysis.securityScore
-    : (latestCompletedAnalysis?.securityScore ?? 0)
 
   return (
     <div className="flex min-h-full flex-col">
@@ -318,7 +301,7 @@ export function AnalysisView({ pr, analysis, history = [], onBack }: AnalysisVie
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
           <Card className="border-border/50 bg-accent/20">
             <CardContent className="p-4 text-center">
-              <div className="text-2xl font-black text-blue-400 sm:text-3xl">{displayQualityScore}%</div>
+              <div className="text-2xl font-black text-blue-400 sm:text-3xl">{analysis.qualityScore || 0}%</div>
               <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
                 Quality
               </div>
@@ -326,7 +309,7 @@ export function AnalysisView({ pr, analysis, history = [], onBack }: AnalysisVie
           </Card>
           <Card className="border-border/50 bg-accent/20">
             <CardContent className="p-4 text-center">
-              <div className="text-2xl font-black text-red-400 sm:text-3xl">{displaySecurityScore}%</div>
+              <div className="text-2xl font-black text-red-400 sm:text-3xl">{analysis.securityScore || 0}%</div>
               <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
                 Security
               </div>
@@ -350,74 +333,6 @@ export function AnalysisView({ pr, analysis, history = [], onBack }: AnalysisVie
               </div>
             </CardContent>
           </Card>
-        </div>
-
-        {/* Active Neural Engine squad config box */}
-        <div className="rounded-[1.5rem] border border-border/50 bg-accent/20 p-4 space-y-4">
-          <div className="flex items-center gap-2">
-            <Cpu className="h-4 w-4 text-primary animate-pulse" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-foreground">
-              Active Neural Engine Squad Configuration
-            </span>
-          </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              {
-                role: "Code Quality & Architecture Guard",
-                description: "Analyzes code changes for readability, clean code patterns, performance bottlenecks, and architectural violations.",
-                icon: FileCode2
-              },
-              {
-                role: "Security Compliance & Risk Auditor",
-                description: "Identifies security vulnerabilities, injection risks, authentication flaws, credential leaks, and OWASP Top 10 issues.",
-                icon: Shield
-              },
-              {
-                role: "Quantitative Metrics & Scoring Engine",
-                description: "Evaluates the overall diff and findings to compute quality/security scores and draft the pull request review summary.",
-                icon: Cpu
-              },
-              {
-                role: "Compliance Standards Referencer",
-                description: "Augments all identified findings with compliance documentation, CWE codes, OWASP references, or official language docs.",
-                icon: Link2
-              }
-            ].map((info, idx) => {
-              const modelId = analysis.models?.[idx] || 'unknown';
-              const m = NVIDIA_MODELS.find(x => x.id === modelId);
-              const modelName = m ? `${m.name} (${m.provider})` : modelId;
-              const modelCapability = m ? m.capability : '';
-              const modelDesc = m ? m.description : '';
-              const Icon = info.icon;
-              return (
-                <div key={info.role} className="flex flex-col justify-between space-y-3 rounded-xl border border-border/40 bg-card/45 p-3">
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-primary shadow-inner">
-                        <Icon className="h-3.5 w-3.5" />
-                      </div>
-                      <span className="text-[10px] font-black uppercase tracking-wider text-foreground">
-                        {info.role}
-                      </span>
-                    </div>
-                    <p className="text-[10px] font-bold leading-normal text-muted-foreground">
-                      {info.description}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-border/30 bg-background/50 p-2.5 space-y-0.5">
-                    <div className="text-[10px] font-black text-foreground truncate">
-                      {modelName}
-                    </div>
-                    {modelCapability && modelDesc && (
-                      <div className="text-[9px] font-semibold text-primary italic">
-                        ✨ {modelCapability} — {modelDesc}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
         </div>
 
         {/* Informational Card */}
@@ -447,7 +362,6 @@ export function AnalysisView({ pr, analysis, history = [], onBack }: AnalysisVie
               commitSha={sha} 
               findings={findingsByCommit[sha]} 
               isLatest={index === 0}
-              analysisModels={analysis.models}
             />
           ))}
         </div>

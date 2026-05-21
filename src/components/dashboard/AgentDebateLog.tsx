@@ -18,7 +18,6 @@ import { MessageSquare, CheckCircle2, XCircle, HelpCircle, Info } from 'lucide-r
 
 interface AgentDebateLogProps {
   finding: Finding
-  analysisModels?: string[]
   children?: React.ReactNode
 }
 
@@ -44,46 +43,11 @@ function VerdictLabel({ verdict }: { verdict: AgentReasoning['verdict'] }) {
   }
 }
 
-export function AgentDebateLog({ finding, analysisModels = [], children }: AgentDebateLogProps) {
+export function AgentDebateLog({ finding, children }: AgentDebateLogProps) {
   const [open, setOpen] = useState(false)
 
-  // Synthesize reasonings from database models if agentReasonings is empty
-  const allPossibleModels = [
-    { id: 'llama-3.1', name: 'Llama 3.1 70B' },
-    { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro' },
-    { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash' },
-    { id: 'mistral-medium-3.5', name: 'Mistral Medium 3.5' },
-    { id: 'mistral-small-4', name: 'Mistral Small 4' },
-    { id: 'nemotron-3-super', name: 'Nemotron 3 Super' },
-    { id: 'phi-4', name: 'Phi-4' },
-    { id: 'gemma-2-27b', name: 'Gemma 2 27B' },
-    { id: 'gemma-3', name: 'Gemma 3' },
-    { id: 'minimax-m2.7', name: 'MiniMax M2.7' }
-  ]
-
-  let reasonings = finding.agentReasonings || []
-  if (reasonings.length === 0) {
-    const modelsToUse = analysisModels && analysisModels.length > 0
-      ? analysisModels
-      : finding.models || []
-
-    reasonings = modelsToUse.map(modelId => {
-      const modelInfo = allPossibleModels.find(m => m.id === modelId) || { id: modelId, name: modelId };
-      const isAgreed = finding.models?.includes(modelId);
-      return {
-        agentId: modelId,
-        agentName: modelInfo.name,
-        verdict: isAgreed ? ('positive' as const) : ('negative' as const),
-        reasoning: isAgreed
-          ? `Identified and flagged this issue: "${finding.issue}". Rationale: ${finding.rationale}`
-          : `Analyzed the code changes but did not flag this issue. No critical pattern matching found for "${finding.issue}".`,
-        confidence: isAgreed
-          ? (finding.confidence === 'High' ? 0.92 : finding.confidence === 'Medium' ? 0.75 : 0.45)
-          : 0.85
-      };
-    });
-  }
-
+  // Count verdicts
+  const reasonings = finding.agentReasonings || []
   const positiveCount = reasonings.filter((r) => r.verdict === 'positive').length
   const negativeCount = reasonings.filter((r) => r.verdict === 'negative').length
   const neutralCount = reasonings.filter((r) => r.verdict === 'neutral').length
