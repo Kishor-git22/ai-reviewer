@@ -245,7 +245,7 @@ export class ReviewerController {
       if (debateLog.agents && Array.isArray(debateLog.agents)) {
         analysis.findings = analysis.findings.map(finding => {
           const agentReasonings = debateLog.agents.map(agent => {
-            const agentFinding = agent.content?.findings?.find(
+            const agentFinding = agent.response?.content?.findings?.find(
               f => f.file === finding.file && f.line === finding.line
             );
             
