@@ -231,6 +231,20 @@ export class ReviewerService {
         'Finalizing the review report... 90%',
       );
 
+      // Filter out findings that don't have at least 2 agents agreeing
+      synthesis.findings = synthesis.findings.filter(finding => {
+        let positiveCount = 0;
+        agentResults.forEach(agent => {
+          if (agent.status === 'success' && agent.response?.content?.findings) {
+            const match = agent.response.content.findings.find(
+              (f: any) => f.file === finding.file && f.line === finding.line
+            );
+            if (match) positiveCount++;
+          }
+        });
+        return positiveCount >= 2;
+      });
+
       // 4. Store findings and update analysis
       await this.prisma.$transaction([
         this.prisma.finding.createMany({
@@ -366,11 +380,12 @@ IMPORTANT: Your response must be STABLE, VALID JSON.
 4. DO NOT use markdown tables, bullet points, or any other formatting.
 5. Output ONLY the raw JSON object. Do not include any preamble, postamble, or explanation.
 6. The response MUST start with { and end with }.
+7. CRITICAL: The "reference" MUST be a highly reputable, real, and valid URL (e.g., OWASP, MDN, official language documentation). DO NOT hallucinate highly specific URLs that result in 404 Not Found. If you are unsure of a specific URL, provide a link to the top-level documentation or a well-known resource that contains details related to the vulnerability, fix, or code updates.
 
 Return your response in strict JSON format:
 {
   "findings": [
-    { "file": "string", "line": number, "issue": "string", "type": "Critical|Vulnerability|Warning|Info", "confidence": "High|Medium|Low", "rationale": "string", "resolution": "string", "reference": "URL (OWASP, CWE, or documentation link)" }
+    { "file": "string", "line": number, "issue": "string", "type": "Critical|Vulnerability|Warning|Info", "confidence": "High|Medium|Low", "rationale": "string", "resolution": "string", "reference": "URL (MUST be a real, valid link)" }
   ],
   "qualityScore": number (0-100),
   "securityScore": number (0-100),
@@ -444,11 +459,12 @@ Instructions:
 5. IMPORTANT: Output ONLY the JSON object. Do not include any text before or after.
 6. IMPORTANT: Ensure the JSON is valid. Escape all backslashes as \\\\ and double quotes as \\\".
 7. IMPORTANT: Do not include literal newlines inside JSON strings.
+8. CRITICAL: For the "reference", ensure you select the most reputable, real, and valid URL from the agents. DO NOT include hallucinated URLs that result in 404 Not Found. Provide links to top-level, official documentation related to the vulnerability or code updates.
 
 Return your response in strict JSON format:
 {
   "findings": [
-    { "file": "string", "line": number, "issue": "string", "type": "Critical|Vulnerability|Warning|Info", "confidence": "High|Medium|Low", "rationale": "string", "resolution": "string", "reference": "URL" }
+    { "file": "string", "line": number, "issue": "string", "type": "Critical|Vulnerability|Warning|Info", "confidence": "High|Medium|Low", "rationale": "string", "resolution": "string", "reference": "URL (MUST be a real, valid link)" }
   ],
   "qualityScore": number,
   "securityScore": number,
