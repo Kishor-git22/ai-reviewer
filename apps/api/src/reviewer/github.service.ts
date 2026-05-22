@@ -54,7 +54,17 @@ export class GithubService {
             line: finding.line,
           });
         } catch (individualError: any) {
-          this.logger.warn(`Failed to post individual comment for ${finding.file}: ${individualError.message}`);
+          this.logger.warn(`Failed to post individual comment for ${finding.file}: ${individualError.message}. Falling back to issue comment.`);
+          try {
+            await octokit.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: prNumber,
+              body: `### AI Finding: ${finding.type} (in \`${finding.file}\` at line ${finding.line})\n**Issue:** ${finding.issue}\n\n**Rationale:** ${finding.rationale}\n\n**Suggested Resolution:**\n\`\`\`\n${finding.resolution}\n\`\`\`\n\n---\n*Detected in commit ${headSha.substring(0, 7)}*`,
+            });
+          } catch (issueError: any) {
+            this.logger.error(`Failed to post fallback issue comment for ${finding.file}: ${issueError.message}`);
+          }
         }
       }
     }
