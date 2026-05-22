@@ -185,7 +185,11 @@ export class GithubService {
         });
       }
     } catch (error: any) {
-      this.logger.error(`Failed to manage check run: ${error.message}`);
+      if (error.message?.includes('authenticate via a GitHub App')) {
+        this.logger.debug(`Skipping Check Run creation (Requires GitHub App, but using PAT).`);
+      } else {
+        this.logger.error(`Failed to manage check run: ${error.message}`);
+      }
     }
   }
 }
