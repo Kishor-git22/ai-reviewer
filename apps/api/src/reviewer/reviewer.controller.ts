@@ -156,11 +156,7 @@ export class ReviewerController {
                 'failure',
                 'AI Analysis stopped - Pull request closed.',
               );
-            } catch (statusErr) {
-              this.reviewerService['logger'].error(`Failed to update status on dynamic abort: ${statusErr.message}`);
-            }
-
-            return updatedAnalysis;
+            return this.mapAgentReasonings(updatedAnalysis);
           }
         }
       } catch (err: any) {
@@ -168,7 +164,7 @@ export class ReviewerController {
       }
     }
 
-    return analysis;
+    return this.mapAgentReasonings(analysis);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -177,11 +173,12 @@ export class ReviewerController {
     @Param('repoName') repoName: string,
     @Param('prNumber') prNumber: string,
   ) {
-    return this.prisma.analysis.findMany({
+    const analyses = await this.prisma.analysis.findMany({
       where: { repoName, prNumber: parseInt(prNumber, 10) },
       orderBy: { createdAt: 'desc' },
       include: { findings: true },
     });
+    return analyses.map(a => this.mapAgentReasonings(a));
   }
 
   @Get('repo/:repoName/pr/:prNumber/status')
