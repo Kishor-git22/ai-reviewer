@@ -101,7 +101,7 @@ export class ReviewerController {
       }
     }
 
-    return analysis;
+    return this.mapAgentReasonings(analysis);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -160,7 +160,7 @@ export class ReviewerController {
               this.reviewerService['logger'].error(`Failed to update status on dynamic abort: ${statusErr.message}`);
             }
 
-            return updatedAnalysis;
+            return this.mapAgentReasonings(updatedAnalysis);
           }
         }
       } catch (err: any) {
@@ -168,7 +168,7 @@ export class ReviewerController {
       }
     }
 
-    return analysis;
+    return this.mapAgentReasonings(analysis);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -177,11 +177,12 @@ export class ReviewerController {
     @Param('repoName') repoName: string,
     @Param('prNumber') prNumber: string,
   ) {
-    return this.prisma.analysis.findMany({
+    const analyses = await this.prisma.analysis.findMany({
       where: { repoName, prNumber: parseInt(prNumber, 10) },
       orderBy: { createdAt: 'desc' },
       include: { findings: true },
     });
+    return analyses.map(a => this.mapAgentReasonings(a));
   }
 
   @Get('repo/:repoName/pr/:prNumber/status')
@@ -198,7 +199,7 @@ export class ReviewerController {
         createdAt: true,
       },
     });
-    return analysis || { status: 'not_found' };
+    return this.mapAgentReasonings(analysis) || { status: 'not_found' };
   }
 
   @UseGuards(JwtAuthGuard)
@@ -238,4 +239,45 @@ export class ReviewerController {
       orderBy: { createdAt: 'desc' },
     });
   }
+
+  private mapAgentReasonings(analysis: any) {
+    if (analysis && analysis.findings && analysis.debateLog) {
+      const debateLog: any = analysis.debateLog;
+      if (debateLog.agents && Array.isArray(debateLog.agents)) {
+        analysis.findings = analysis.findings.map(finding => {
+          const agentReasonings = debateLog.agents.map(agent => {
+            const agentFinding = agent.response?.content?.findings?.find(
+              f => f.file === finding.file && f.line === finding.line
+            );
+            
+            if (agentFinding) {
+              return {
+                agentId: agent.model,
+                agentName: agent.model,
+                verdict: 'positive',
+                reasoning: agentFinding.rationale || agentFinding.issue || 'Identified the issue.',
+                confidence: agentFinding.confidence === 'High' ? 0.9 : agentFinding.confidence === 'Medium' ? 0.6 : 0.3
+              };
+            } else {
+              return {
+                agentId: agent.model,
+                agentName: agent.model,
+                verdict: 'negative',
+                reasoning: 'The agent did not flag any issue on this specific line.',
+                confidence: 0.8
+              };
+            }
+          });
+          
+          return {
+            ...finding,
+            agentReasonings,
+            consensus: agentReasonings.filter(r => r.verdict === 'positive').length > 1
+          };
+        });
+      }
+    }
+    return analysis;
+  }
 }
+
