@@ -231,6 +231,20 @@ export class ReviewerService {
         'Finalizing the review report... 90%',
       );
 
+      // Filter out findings that don't have at least 2 agents agreeing
+      synthesis.findings = synthesis.findings.filter(finding => {
+        let positiveCount = 0;
+        agentResults.forEach(agent => {
+          if (agent.status === 'success' && agent.response?.content?.findings) {
+            const match = agent.response.content.findings.find(
+              (f: any) => f.file === finding.file && f.line === finding.line
+            );
+            if (match) positiveCount++;
+          }
+        });
+        return positiveCount >= 2;
+      });
+
       // 4. Store findings and update analysis
       await this.prisma.$transaction([
         this.prisma.finding.createMany({
