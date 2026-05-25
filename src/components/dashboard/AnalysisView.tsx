@@ -92,7 +92,7 @@ function FindingCard({ finding }: { finding: BackendFinding }) {
             {finding.file}:{finding.line}
           </div>
         </div>
-        <CardTitle className={cn("mt-2 text-xl font-black tracking-tight text-foreground", isResolved && "line-through text-muted-foreground")}>
+        <CardTitle className={cn("mt-2 text-xl font-black tracking-tight text-foreground", isResolved && "text-muted-foreground")}>
           {finding.issue}
         </CardTitle>
       </CardHeader>
