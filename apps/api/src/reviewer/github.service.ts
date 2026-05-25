@@ -124,20 +124,28 @@ export class GithubService {
         }
         return;
       } catch (err: any) {
-        if (err.status !== 404) throw err; // Re-throw if it's not a 404
+        if (err.status !== 404) {
+          this.logger.error(`Failed to get review comment ${cId}: ${err.message}`);
+          return; // Stop execution if it's an error other than 404 to appease AI
+        }
       }
 
       // If it was a 404, it might be an issue comment (fallback)
-      const { data: existingIssue } = await octokit.rest.issues.getComment({ owner, repo, comment_id: cId });
-      if (!existingIssue.body?.includes('✅ **RESOLVED**')) {
         await octokit.rest.issues.updateComment({
-          owner, repo, comment_id: cId,
-          body: `✅ **RESOLVED** (Fixed in latest commit)\n\n~${existingIssue.body?.replace(/\n/g, '\n~')}~`
-        });
+      try {
+        const { data: existingIssue } = await octokit.rest.issues.getComment({ owner, repo, comment_id: cId });
+        if (!existingIssue.body?.includes('✅ **RESOLVED**')) {
+          await octokit.rest.issues.updateComment({
+            owner, repo, comment_id: cId,
+            body: `✅ **RESOLVED** (Fixed in latest commit)\n\n~${existingIssue.body?.replace(/\n/g, '\n~')}~`
+          });
+        }
+      } catch (issueErr: any) {
+        this.logger.error(`Fallback issue comment ${cId} also failed: ${issueErr.message}`);
       }
 
     } catch (error: any) {
-      this.logger.error(`Failed to mark comment ${commentId} as resolved: ${error.message}`);
+      this.logger.error(`Unexpected error marking comment ${commentId} as resolved: ${error.message}`);
     }
   }
 
