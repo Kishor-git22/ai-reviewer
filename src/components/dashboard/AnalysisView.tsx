@@ -44,7 +44,7 @@ function FindingCard({ finding }: { finding: BackendFinding }) {
   const bg = isCritical ? 'bg-red-500/10' : isWarning ? 'bg-yellow-500/10' : 'bg-blue-500/10'
   const border = isCritical ? 'border-red-500/20' : isWarning ? 'border-yellow-500/20' : 'border-blue-500/20'
 
-  const isResolved = finding.status === 'resolved'
+  const isResolved = finding?.status === 'resolved'
 
   return (
     <Card className={cn("overflow-hidden border-border/50 bg-card/30 backdrop-blur-sm transition-all hover:border-primary/30 hover:bg-card/50", isResolved && "opacity-60 grayscale-[0.5]")}>
