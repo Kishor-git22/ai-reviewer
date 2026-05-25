@@ -246,23 +246,23 @@ export class ReviewerService {
       });
 
       // 4. Store findings and update analysis
-      await this.prisma.$transaction([
-        this.prisma.finding.createMany({
-          data: synthesis.findings.map((f) => ({
-            analysisId: analysis.id,
-            file: f.file,
-            line: f.line,
-            issue: f.issue,
-            type: f.type,
-            confidence: f.confidence,
-            rationale: f.rationale,
-            resolution: f.resolution,
-            reference: f.reference,
-            commitSha: headSha,
-            models: selectedModels,
-          })),
-        }),
-        this.prisma.analysis.update({
+      const createdFindings = await this.prisma.finding.createManyAndReturn({
+        data: synthesis.findings.map((f) => ({
+          analysisId: analysis.id,
+          file: f.file,
+          line: f.line,
+          issue: f.issue,
+          type: f.type,
+          confidence: f.confidence,
+          rationale: f.rationale,
+          resolution: f.resolution,
+          reference: f.reference,
+          commitSha: headSha,
+          models: selectedModels,
+        })),
+      });
+
+      await this.prisma.analysis.update({
           where: { id: analysis.id },
           data: {
             status: 'completed',
@@ -271,8 +271,7 @@ export class ReviewerService {
             summary: synthesis.summary,
             debateLog: { agents: agentResults } as any,
           },
-        }),
-      ]);
+        });
 
       // 5. Extract valid paths from diff to prevent GitHub 422 errors
       const validPaths = new Set(
@@ -282,11 +281,11 @@ export class ReviewerService {
       );
 
       // Filter findings to only those that apply to valid paths in the diff
-      const validFindings = synthesis.findings.filter((f) => validPaths.has(f.file));
+      const validFindings = createdFindings.filter((f) => validPaths.has(f.file));
 
       if (validFindings.length > 0) {
         this.logger.log(`Posting ${validFindings.length} valid inline review comments...`);
-        await this.githubService.postComments(
+        const commentIds = await this.githubService.postComments(
           githubToken,
           owner,
           repoName,
@@ -294,6 +293,13 @@ export class ReviewerService {
           validFindings,
           headSha,
         );
+
+        for (const [findingId, commentId] of Object.entries(commentIds)) {
+          await this.prisma.finding.update({
+            where: { id: findingId },
+            data: { githubCommentId: commentId }
+          });
+        }
       } else {
         this.logger.log('No inline findings match the PR diff files. Posting summary only.');
         await this.githubService.postSummaryOnly(
@@ -307,14 +313,17 @@ export class ReviewerService {
         );
       }
 
-      // 6. Update Status to Success
+      // 6. Cross-commit comparison for resolved issues
+      await this.resolveOldFindings(owner, repoName, prNumber, createdFindings, githubToken);
+
+      // 7. Update Status to Success
       await this.githubService.updateCommitStatus(
         githubToken,
         owner,
         repoName,
         headSha,
         'success',
-        'AI Analysis Complete! 100% Done.',
+        `Analysis complete: found ${validFindings.length} issues.`,
       );
 
       return analysis.id;
@@ -720,5 +729,49 @@ Return your response in strict JSON format:
       state,
       description
     );
+  }
+
+  /**
+   * Compares the current findings with findings from the previous analysis
+   * on the same PR. If an old finding is no longer present, mark it resolved.
+   */
+  private async resolveOldFindings(owner: string, repoName: string, prNumber: number, currentFindings: any[], githubToken: string) {
+    // 1. Fetch previous analysis for this PR
+    const analyses = await this.prisma.analysis.findMany({
+      where: { repoName, prNumber },
+      orderBy: { createdAt: 'desc' },
+      take: 2, // We want the one right before the current one
+      include: { findings: true }
+    });
+
+    if (analyses.length < 2) return; // No previous analysis to compare with
+
+    const previousAnalysis = analyses[1];
+    
+    for (const oldFinding of previousAnalysis.findings) {
+      if (oldFinding.status === 'resolved') continue;
+
+      // Check if it exists in the current findings (match by file and similar issue type/rationale snippet)
+      // Since line numbers can shift when code is added/removed above, matching by line exactly is brittle.
+      // We will match by file and issue type.
+      const isStillPresent = currentFindings.some(newFinding => 
+        newFinding.file === oldFinding.file && newFinding.type === oldFinding.type
+      );
+
+      if (!isStillPresent) {
+        // Mark as resolved in database
+        await this.prisma.finding.update({
+          where: { id: oldFinding.id },
+          data: { status: 'resolved' }
+        });
+
+        this.logger.log(`Marking previous finding as resolved: ${oldFinding.id} (Comment: ${oldFinding.githubCommentId})`);
+
+        // Mark as resolved on GitHub
+        if (oldFinding.githubCommentId) {
+          await this.githubService.markCommentAsResolved(githubToken, owner, repoName, oldFinding.githubCommentId);
+        }
+      }
+    }
   }
 }

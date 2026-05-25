@@ -77,6 +77,8 @@ model Finding {
   consensus   Boolean  @default(false)
   rationale   String
   resolution  String
+  status      String   @default("open") // open, resolved
+  githubCommentId String? @map("github_comment_id")
   models      String[] // Which models agreed on this finding
   reference   String?
   commitSha   String?  @map("commit_sha")

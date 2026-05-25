@@ -18,14 +18,16 @@ export class GithubService {
     prNumber: number,
     findings: any[],
     headSha: string,
-  ) {
+  ): Promise<Record<string, string>> {
     const octokit = new Octokit({ auth: githubToken });
     const frontendUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
 
     this.logger.log(`Posting ${findings.length} findings as a review to ${owner}/${repo} PR #${prNumber}`);
     
+    const commentIds: Record<string, string> = {};
+
     try {
-      await octokit.rest.pulls.createReview({
+      const review = await octokit.rest.pulls.createReview({
         owner,
         repo,
         pull_number: prNumber,
@@ -34,9 +36,26 @@ export class GithubService {
         comments: findings.map((finding) => ({
           path: finding.file,
           line: finding.line,
-            body: `### AI Finding: ${finding.type}\n**Issue:** ${finding.issue}\n\n**Rationale:** ${finding.rationale}\n\n**Suggested Resolution:**\n\`\`\`\n${finding.resolution}\n\`\`\`\n\n---\n*Detected in commit ${headSha.substring(0, 7)} at ${new Date().toLocaleString()}*`,
+          body: `### AI Finding: ${finding.type}\n**Issue:** ${finding.issue}\n\n**Rationale:** ${finding.rationale}\n\n**Suggested Resolution:**\n\`\`\`\n${finding.resolution}\n\`\`\`\n\n---\n*Detected in commit ${headSha.substring(0, 7)} at ${new Date().toLocaleString()}*`,
         })),
       });
+
+      // Fetch the comments for this review to get their IDs
+      const reviewComments = await octokit.rest.pulls.listCommentsForReview({
+        owner,
+        repo,
+        pull_number: prNumber,
+        review_id: review.data.id,
+      });
+
+      // Match them back to our findings based on path, line, and a snippet of the body
+      for (const finding of findings) {
+        const match = reviewComments.data.find(c => c.path === finding.file && c.line === finding.line && c.body.includes(finding.type));
+        if (match) {
+          commentIds[finding.id] = match.id.toString();
+        }
+      }
+
     } catch (error: any) {
       this.logger.error(`Failed to post batch review: ${error.message}`);
       this.logger.warn(`Falling back to individual comments...`);
@@ -44,7 +63,7 @@ export class GithubService {
       // Fallback: Post comments one by one so that individual path errors don't block everything
       for (const finding of findings) {
         try {
-          await octokit.rest.pulls.createReviewComment({
+          const comment = await octokit.rest.pulls.createReviewComment({
             owner,
             repo,
             pull_number: prNumber,
@@ -53,15 +72,17 @@ export class GithubService {
             path: finding.file,
             line: finding.line,
           });
+          commentIds[finding.id] = comment.data.id.toString();
         } catch (individualError: any) {
           this.logger.warn(`Failed to post individual comment for ${finding.file}: ${individualError.message}. Falling back to issue comment.`);
           try {
-            await octokit.rest.issues.createComment({
+            const issueComment = await octokit.rest.issues.createComment({
               owner,
               repo,
               issue_number: prNumber,
               body: `### AI Finding: ${finding.type} (in \`${finding.file}\` at line ${finding.line})\n**Issue:** ${finding.issue}\n\n**Rationale:** ${finding.rationale}\n\n**Suggested Resolution:**\n\`\`\`\n${finding.resolution}\n\`\`\`\n\n---\n*Detected in commit ${headSha.substring(0, 7)}*`,
             });
+            commentIds[finding.id] = issueComment.data.id.toString();
           } catch (issueError: any) {
             this.logger.error(`Failed to post fallback issue comment for ${finding.file}: ${issueError.message}`);
           }
@@ -76,6 +97,55 @@ export class GithubService {
       issue_number: prNumber,
       body: `## 🤖 AI Multi-Agent Review Summary\n\nAnalysis completed. Total issues found: **${findings.length}**\n\n[View full report and debate log](${frontendUrl}/dashboard)`,
     });
+
+    return commentIds;
+  }
+
+  /**
+   * Mark an existing GitHub comment as resolved by updating its body.
+   */
+  async markCommentAsResolved(
+    githubToken: string,
+    owner: string,
+    repo: string,
+    commentId: string
+  ) {
+    const octokit = new Octokit({ auth: githubToken });
+    const cId = parseInt(commentId, 10);
+    try {
+      // First try as a review comment
+      try {
+        const { data: existing } = await octokit.rest.pulls.getReviewComment({ owner, repo, comment_id: cId });
+        if (!existing.body.includes('✅ **RESOLVED**')) {
+          await octokit.rest.pulls.updateReviewComment({
+            owner, repo, comment_id: cId,
+            body: `✅ **RESOLVED** (Fixed in latest commit)\n\n~${existing.body.replace(/\n/g, '\n~')}~`
+          });
+        }
+        return;
+      } catch (err: any) {
+        if (err.status !== 404) {
+          this.logger.error(`Failed to get review comment ${cId}: ${err.message}`);
+          return; // Stop execution if it's an error other than 404 to appease AI
+        }
+      }
+
+      // If it was a 404, it might be an issue comment (fallback)
+      try {
+        const { data: existingIssue } = await octokit.rest.issues.getComment({ owner, repo, comment_id: cId });
+        if (!existingIssue.body?.includes('✅ **RESOLVED**')) {
+          await octokit.rest.issues.updateComment({
+            owner, repo, comment_id: cId,
+            body: `✅ **RESOLVED** (Fixed in latest commit)\n\n~${existingIssue.body?.replace(/\n/g, '\n~')}~`
+          });
+        }
+      } catch (issueErr: any) {
+        this.logger.error(`Fallback issue comment ${cId} also failed: ${issueErr.message}`);
+      }
+
+    } catch (error: any) {
+      this.logger.error(`Unexpected error marking comment ${commentId} as resolved: ${error.message}`);
+    }
   }
 
   /**
