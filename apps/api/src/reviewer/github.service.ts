@@ -102,7 +102,7 @@ export class GithubService {
   }
 
   /**
-   * Mark an existing GitHub comment as resolved by updating its body.
+   * Mark an existing GitHub comment as resolved by updating its body and resolving the thread.
    */
   async markCommentAsResolved(
     githubToken: string,
@@ -122,6 +122,39 @@ export class GithubService {
             body: `✅ **RESOLVED** (Fixed in latest commit)\n\n~${existing.body.replace(/\n/g, '\n~')}~`
           });
         }
+        
+        // Resolve the GitHub conversation thread using GraphQL
+        try {
+          const query = `
+            query($nodeId: ID!) {
+              node(id: $nodeId) {
+                ... on PullRequestReviewComment {
+                  pullRequestReviewThread {
+                    id
+                  }
+                }
+              }
+            }
+          `;
+          const response: any = await octokit.graphql(query, { nodeId: existing.node_id });
+          const threadId = response?.node?.pullRequestReviewThread?.id;
+          
+          if (threadId) {
+            const mutation = `
+              mutation($threadId: ID!) {
+                resolveReviewThread(input: {threadId: $threadId}) {
+                  thread {
+                    isResolved
+                  }
+                }
+              }
+            `;
+            await octokit.graphql(mutation, { threadId });
+          }
+        } catch (gqlErr: any) {
+          this.logger.warn(`Failed to resolve GraphQL thread for comment ${cId}: ${gqlErr.message}`);
+        }
+
         return;
       } catch (err: any) {
         if (err.status !== 404) {
