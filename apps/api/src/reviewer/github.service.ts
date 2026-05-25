@@ -131,7 +131,6 @@ export class GithubService {
       }
 
       // If it was a 404, it might be an issue comment (fallback)
-        await octokit.rest.issues.updateComment({
       try {
         const { data: existingIssue } = await octokit.rest.issues.getComment({ owner, repo, comment_id: cId });
         if (!existingIssue.body?.includes('✅ **RESOLVED**')) {
