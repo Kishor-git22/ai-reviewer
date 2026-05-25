@@ -246,23 +246,23 @@ export class ReviewerService {
       });
 
       // 4. Store findings and update analysis
-      await this.prisma.$transaction([
-        this.prisma.finding.createMany({
-          data: synthesis.findings.map((f) => ({
-            analysisId: analysis.id,
-            file: f.file,
-            line: f.line,
-            issue: f.issue,
-            type: f.type,
-            confidence: f.confidence,
-            rationale: f.rationale,
-            resolution: f.resolution,
-            reference: f.reference,
-            commitSha: headSha,
-            models: selectedModels,
-          })),
-        }),
-        this.prisma.analysis.update({
+      const createdFindings = await this.prisma.finding.createManyAndReturn({
+        data: synthesis.findings.map((f) => ({
+          analysisId: analysis.id,
+          file: f.file,
+          line: f.line,
+          issue: f.issue,
+          type: f.type,
+          confidence: f.confidence,
+          rationale: f.rationale,
+          resolution: f.resolution,
+          reference: f.reference,
+          commitSha: headSha,
+          models: selectedModels,
+        })),
+      });
+
+      await this.prisma.analysis.update({
           where: { id: analysis.id },
           data: {
             status: 'completed',
@@ -271,8 +271,7 @@ export class ReviewerService {
             summary: synthesis.summary,
             debateLog: { agents: agentResults } as any,
           },
-        }),
-      ]);
+        });
 
       // 5. Extract valid paths from diff to prevent GitHub 422 errors
       const validPaths = new Set(
@@ -282,11 +281,11 @@ export class ReviewerService {
       );
 
       // Filter findings to only those that apply to valid paths in the diff
-      const validFindings = synthesis.findings.filter((f) => validPaths.has(f.file));
+      const validFindings = createdFindings.filter((f) => validPaths.has(f.file));
 
       if (validFindings.length > 0) {
         this.logger.log(`Posting ${validFindings.length} valid inline review comments...`);
-        await this.githubService.postComments(
+        const commentIds = await this.githubService.postComments(
           githubToken,
           owner,
           repoName,
@@ -294,6 +293,13 @@ export class ReviewerService {
           validFindings,
           headSha,
         );
+
+        for (const [findingId, commentId] of Object.entries(commentIds)) {
+          await this.prisma.finding.update({
+            where: { id: findingId },
+            data: { githubCommentId: commentId }
+          });
+        }
       } else {
         this.logger.log('No inline findings match the PR diff files. Posting summary only.');
         await this.githubService.postSummaryOnly(
@@ -307,14 +313,17 @@ export class ReviewerService {
         );
       }
 
-      // 6. Update Status to Success
+      // 6. Cross-commit comparison for resolved issues
+      await this.resolveOldFindings(owner, repoName, prNumber, createdFindings, githubToken);
+
+      // 7. Update Status to Success
       await this.githubService.updateCommitStatus(
         githubToken,
         owner,
         repoName,
         headSha,
         'success',
-        'AI Analysis Complete! 100% Done.',
+        `Analysis complete: found ${validFindings.length} issues.`,
       );
 
       return analysis.id;
