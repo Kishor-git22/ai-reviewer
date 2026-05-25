@@ -730,4 +730,48 @@ Return your response in strict JSON format:
       description
     );
   }
+
+  /**
+   * Compares the current findings with findings from the previous analysis
+   * on the same PR. If an old finding is no longer present, mark it resolved.
+   */
+  private async resolveOldFindings(owner: string, repoName: string, prNumber: number, currentFindings: any[], githubToken: string) {
+    // 1. Fetch previous analysis for this PR
+    const analyses = await this.prisma.analysis.findMany({
+      where: { repoName, prNumber },
+      orderBy: { createdAt: 'desc' },
+      take: 2, // We want the one right before the current one
+      include: { findings: true }
+    });
+
+    if (analyses.length < 2) return; // No previous analysis to compare with
+
+    const previousAnalysis = analyses[1];
+    
+    for (const oldFinding of previousAnalysis.findings) {
+      if (oldFinding.status === 'resolved') continue;
+
+      // Check if it exists in the current findings (match by file and similar issue type/rationale snippet)
+      // Since line numbers can shift when code is added/removed above, matching by line exactly is brittle.
+      // We will match by file and issue type.
+      const isStillPresent = currentFindings.some(newFinding => 
+        newFinding.file === oldFinding.file && newFinding.type === oldFinding.type
+      );
+
+      if (!isStillPresent) {
+        // Mark as resolved in database
+        await this.prisma.finding.update({
+          where: { id: oldFinding.id },
+          data: { status: 'resolved' }
+        });
+
+        this.logger.log(`Marking previous finding as resolved: ${oldFinding.id} (Comment: ${oldFinding.githubCommentId})`);
+
+        // Mark as resolved on GitHub
+        if (oldFinding.githubCommentId) {
+          await this.githubService.markCommentAsResolved(githubToken, owner, repoName, oldFinding.githubCommentId);
+        }
+      }
+    }
+  }
 }
