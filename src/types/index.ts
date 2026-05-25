@@ -93,6 +93,7 @@ export interface BackendFinding {
   consensus: boolean
   rationale: string
   resolution: string
+  status: 'open' | 'resolved'
   models: string[]
   reference?: string
   commitSha?: string
