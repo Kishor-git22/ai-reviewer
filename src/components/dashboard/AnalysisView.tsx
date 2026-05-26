@@ -44,8 +44,10 @@ function FindingCard({ finding }: { finding: BackendFinding }) {
   const bg = isCritical ? 'bg-red-500/10' : isWarning ? 'bg-yellow-500/10' : 'bg-blue-500/10'
   const border = isCritical ? 'border-red-500/20' : isWarning ? 'border-yellow-500/20' : 'border-blue-500/20'
 
+  const isResolved = finding?.status === 'resolved'
+
   return (
-    <Card className="overflow-hidden border-border/50 bg-card/30 backdrop-blur-sm transition-all hover:border-primary/30 hover:bg-card/50">
+    <Card className={cn("overflow-hidden border-border/50 bg-card/30 backdrop-blur-sm transition-all hover:border-primary/30 hover:bg-card/50", isResolved && "opacity-60 grayscale-[0.5]")}>
       <CardHeader className="pb-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2">
@@ -54,6 +56,14 @@ function FindingCard({ finding }: { finding: BackendFinding }) {
             >
               {finding.type}
             </Badge>
+            {isResolved && (
+              <Badge
+                variant="outline"
+                className="border-green-500/30 bg-green-500/20 text-[10px] text-green-500 font-bold"
+              >
+                ✅ Resolved
+              </Badge>
+            )}
             {finding.consensus ? (
               <Badge
                 variant="outline"
@@ -82,7 +92,7 @@ function FindingCard({ finding }: { finding: BackendFinding }) {
             {finding.file}:{finding.line}
           </div>
         </div>
-        <CardTitle className="mt-2 text-xl font-black tracking-tight text-foreground">
+        <CardTitle className={cn("mt-2 text-xl font-black tracking-tight text-foreground", isResolved && "text-muted-foreground")}>
           {finding.issue}
         </CardTitle>
       </CardHeader>
