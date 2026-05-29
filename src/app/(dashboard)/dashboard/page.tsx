@@ -382,9 +382,9 @@ export default function DashboardPage() {
           <div className="mx-auto max-w-5xl space-y-12">
             <div className="space-y-6">
               <div className="text-center">
-                <h3 className="text-2xl font-black text-foreground">Launch Manual Review</h3>
+                <h3 className="text-2xl font-black text-foreground">AI Analysis Not Done</h3>
                 <p className="text-muted-foreground mt-2">
-                  This PR will be reviewed by your active Neural Engine team.
+                  AI Analysis is not done for this pull request. You can manually launch a review below.
                 </p>
               </div>
               
