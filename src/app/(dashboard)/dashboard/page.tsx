@@ -104,10 +104,18 @@ function PRListItem({
         <div
           className={cn(
             'flex h-12 w-12 items-center justify-center rounded-2xl transition-transform group-hover:scale-110',
-            pr.vuls > 0 ? 'bg-red-500/10 text-red-400' : 'bg-green-500/10 text-green-400'
+            (pr.status === 'in_progress' || pr.status === 'pending') ? 'bg-blue-500/10 text-blue-400' :
+            (pr.status === 'stopped' || pr.status === 'failed' || pr.vuls > 0) ? 'bg-red-500/10 text-red-400' :
+            'bg-green-500/10 text-green-400'
           )}
         >
-          {pr.vuls > 0 ? <AlertCircle size={22} /> : <CheckCircle2 size={22} />}
+          {(pr.status === 'in_progress' || pr.status === 'pending') ? (
+            <Loader2 className="animate-spin" size={22} />
+          ) : (pr.status === 'stopped' || pr.status === 'failed' || pr.vuls > 0) ? (
+            <AlertCircle size={22} />
+          ) : (
+            <CheckCircle2 size={22} />
+          )}
         </div>
         <div>
           <div className="flex items-center gap-2">

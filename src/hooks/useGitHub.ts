@@ -35,6 +35,8 @@ export function useRepos() {
 export function useRepoPRs(owner?: string, repo?: string) {
   const { data: session } = useSession()
   const githubToken = session?.user?.githubToken
+  const token = session?.user?.accessToken
+  const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002').replace(/\/$/, '')
 
   return useQuery({
     queryKey: ['github', 'prs', owner, repo],
@@ -57,23 +59,40 @@ export function useRepoPRs(owner?: string, repo?: string) {
 
       const githubPRs = await response.json()
 
-      // Map GitHub PRs to our application's PullRequest type
-      return githubPRs.map((pr: any) => ({
-        id: pr.id,
-        number: pr.number,
-        title: pr.title,
-        repo: repo,
-        status: pr.state === 'open' ? 'Pending Review' : 'Analysis Complete',
-        issues: Math.floor(Math.random() * 5), // Mock data for now
-        quality: 80 + Math.floor(Math.random() * 20), // Mock data for now
-        vuls: Math.floor(Math.random() * 2), // Mock data for now
-        recs: Math.floor(Math.random() * 10), // Mock data for now
-        user: pr.user.login,
-        avatar: pr.user.avatar_url,
-        createdAt: pr.created_at,
-        headSha: pr.head.sha,
-      }))
+      let statuses: Record<string, any> = {}
+      if (token) {
+        try {
+          const statusRes = await fetch(`${API_URL}/reviewer/repo/${repo}/prs/status`, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+          if (statusRes.ok) {
+            statuses = await statusRes.json()
+          }
+        } catch (e) {
+          console.error("Failed to fetch backend PR statuses", e)
+        }
+      }
+
+      return githubPRs.map((pr: any) => {
+        const prStatus = statuses[pr.number]
+        return {
+          id: pr.id,
+          number: pr.number,
+          title: pr.title,
+          repo: repo,
+          status: prStatus?.status || (pr.state === 'open' ? 'Pending Review' : 'Analysis Complete'),
+          issues: prStatus?.vuls || 0,
+          quality: prStatus?.qualityScore || 100,
+          vuls: prStatus?.vuls || 0,
+          recs: prStatus?.recs || 0,
+          user: pr.user.login,
+          avatar: pr.user.avatar_url,
+          createdAt: pr.created_at,
+          headSha: pr.head.sha,
+        }
+      })
     },
     enabled: !!githubToken && !!owner && !!repo,
+    refetchInterval: 5000,
   })
 }
