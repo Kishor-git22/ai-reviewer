@@ -106,6 +106,7 @@ function PRListItem({
             'flex h-12 w-12 items-center justify-center rounded-2xl transition-transform group-hover:scale-110',
             (pr.status === 'in_progress' || pr.status === 'pending') ? 'bg-blue-500/10 text-blue-400' :
             (pr.status === 'stopped' || pr.status === 'failed' || pr.vuls > 0) ? 'bg-red-500/10 text-red-400' :
+            (pr.status === 'unreviewed') ? 'bg-muted/10 text-muted-foreground' :
             'bg-green-500/10 text-green-400'
           )}
         >
@@ -113,6 +114,8 @@ function PRListItem({
             <Loader2 className="animate-spin" size={22} />
           ) : (pr.status === 'stopped' || pr.status === 'failed' || pr.vuls > 0) ? (
             <AlertCircle size={22} />
+          ) : (pr.status === 'unreviewed') ? (
+            <GitPullRequest size={22} />
           ) : (
             <CheckCircle2 size={22} />
           )}
@@ -129,8 +132,12 @@ function PRListItem({
               <div className="h-1.5 w-1.5 rounded-full bg-blue-500" />
               {(pr as any).user}
             </span>
-            <span>•</span>
-            <span>Score: {pr.quality}%</span>
+            {pr.quality !== null && (
+              <>
+                <span>•</span>
+                <span>Score: {pr.quality}%</span>
+              </>
+            )}
             <span>•</span>
             <span>{new Date((pr as any).createdAt).toLocaleDateString()}</span>
           </div>
