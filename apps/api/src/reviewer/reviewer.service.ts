@@ -564,7 +564,7 @@ Return your response in strict JSON format:
    */
   private splitDiffByFile(diff: string): Map<string, string> {
     const files = new Map<string, string>();
-    const filePattern = /^diff --git a\/.+? b\/(.+?)$/gm;
+    const filePattern = /^diff --git a\/\S+ b\/(\S+)$/gm;
     let match: RegExpExecArray | null;
     const positions: Array<{ file: string; start: number }> = [];
 
