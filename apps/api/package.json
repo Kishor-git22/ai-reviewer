@@ -11,6 +11,7 @@
     "postinstall": "prisma generate",
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",
+    "typecheck": "tsc --noEmit",
     "start": "nest start",
     "start:dev": "lsof -ti:3002 | xargs kill -9 2>/dev/null || true && nest start --watch",
     "start:debug": "nest start --debug --watch",
