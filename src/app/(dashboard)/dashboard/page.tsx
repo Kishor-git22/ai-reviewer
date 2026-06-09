@@ -104,17 +104,17 @@ function PRListItem({
         <div
           className={cn(
             'flex h-12 w-12 items-center justify-center rounded-2xl transition-transform group-hover:scale-110',
-            (pr.status === 'in_progress' || pr.status === 'pending') ? 'bg-blue-500/10 text-blue-400' :
-            (pr.status === 'stopped' || pr.status === 'failed' || pr.vuls > 0) ? 'bg-red-500/10 text-red-400' :
-            (pr.status === 'unreviewed') ? 'bg-muted/10 text-muted-foreground' :
+            ((pr as any).status === 'In Progress' || (pr as any).status === 'in_progress' || (pr as any).status === 'pending') ? 'bg-blue-500/10 text-blue-400' :
+            ((pr as any).status === 'stopped' || (pr as any).status === 'failed' || pr.vuls > 0) ? 'bg-red-500/10 text-red-400' :
+            ((pr as any).status === 'Pending Review' || (pr as any).status === 'unreviewed') ? 'bg-muted/10 text-muted-foreground' :
             'bg-green-500/10 text-green-400'
           )}
         >
-          {(pr.status === 'in_progress' || pr.status === 'pending') ? (
+          {((pr as any).status === 'In Progress' || (pr as any).status === 'in_progress' || (pr as any).status === 'pending') ? (
             <Loader2 className="animate-spin" size={22} />
-          ) : (pr.status === 'stopped' || pr.status === 'failed' || pr.vuls > 0) ? (
+          ) : ((pr as any).status === 'stopped' || (pr as any).status === 'failed' || pr.vuls > 0) ? (
             <AlertCircle size={22} />
-          ) : (pr.status === 'unreviewed') ? (
+          ) : ((pr as any).status === 'Pending Review' || (pr as any).status === 'unreviewed') ? (
             <GitPullRequest size={22} />
           ) : (
             <CheckCircle2 size={22} />
@@ -153,76 +153,44 @@ export default function DashboardPage() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  const [selectedRepo, setSelectedRepo] = useState<Repository | null>(null)
-  const [selectedPr, setSelectedPr] = useState<PullRequest | null>(null)
+  const ownerParam = searchParams.get('owner')
+  const repoParam = searchParams.get('repo')
+  const prParam = searchParams.get('pr')
+
   const { data: userSettings } = useUserSettings()
   const selectedModels = userSettings?.selectedModels || ['llama-3.1', 'deepseek-v4-pro', 'mistral-medium-3.5']
 
-  const [showModelSelection, setShowModelSelection] = useState(false)
-  const [currentAnalysisId, setCurrentAnalysisId] = useState<string | null>(null)
+  const [forceSetup, setForceSetup] = useState(false)
+  const [activeAnalysisId, setActiveAnalysisId] = useState<string | null>(null)
 
   const { data: repos, isLoading: isReposLoading, refetch: refetchRepos } = useRepos()
   const { data: activeRepos } = useActiveRepos()
   const registerMutation = useRegisterWebhook()
   
+  // Derived state from URL parameters
+  const selectedRepo = repos?.find(r => r.owner.login === ownerParam && r.name === repoParam) || null
+  
   const { data: prs, isLoading: isPrsLoading, refetch: refetchPrs } = useRepoPRs(
-    selectedRepo?.owner.login,
-    selectedRepo?.name
+    ownerParam || undefined,
+    repoParam || undefined
   )
   
-  const { data: analysis, isLoading: isAnalysisLoading } = useAnalysis(currentAnalysisId)
+  const selectedPr = prs?.find(p => (p as any).number.toString() === prParam) || null
+
   const { data: prAnalysis, isLoading: isPrAnalysisLoading } = useAnalysisByPr(
-    selectedRepo?.name, 
-    selectedPr ? (selectedPr as any).number : undefined
+    repoParam || undefined, 
+    prParam ? parseInt(prParam) : undefined
   )
+  
   const { data: analysisHistory } = useAnalysisHistory(
-    selectedRepo?.name,
-    selectedPr ? (selectedPr as any).number : undefined
+    repoParam || undefined,
+    prParam ? parseInt(prParam) : undefined
   )
 
-  // Rehydrate state from URL on load/refresh/back-navigation
-  useEffect(() => {
-    const owner = searchParams.get('owner')
-    const repoName = searchParams.get('repo')
-    const prNumber = searchParams.get('pr')
-
-    // Handle Repo Selection
-    if (!owner || !repoName) {
-      if (selectedRepo) setSelectedRepo(null)
-    } else if (repos && (!selectedRepo || selectedRepo.name !== repoName || selectedRepo.owner.login !== owner)) {
-      const repo = repos.find(r => r.owner.login === owner && r.name === repoName)
-      if (repo) setSelectedRepo(repo)
-    }
-
-    // Handle PR Selection
-    if (!prNumber) {
-      if (selectedPr) {
-        setSelectedPr(null)
-        setShowModelSelection(false)
-        setCurrentAnalysisId(null)
-      }
-    } else if (prs && (!selectedPr || (selectedPr as any).number.toString() !== prNumber)) {
-      const pr = prs.find(p => (p as any).number.toString() === prNumber)
-      if (pr) setSelectedPr(pr)
-    }
-  }, [repos, prs, searchParams, selectedRepo, selectedPr])
-
-  // Handle Analysis State & Flash of Setup Screen
-  useEffect(() => {
-    if (selectedPr) {
-      if (isPrAnalysisLoading) {
-        // Still fetching from backend, wait...
-        return;
-      }
-      if (prAnalysis) {
-        setCurrentAnalysisId(prAnalysis.id)
-        setShowModelSelection(false)
-      } else if (!currentAnalysisId) {
-        // Finished loading and no analysis exists
-        setShowModelSelection(true)
-      }
-    }
-  }, [selectedPr, prAnalysis, isPrAnalysisLoading, currentAnalysisId])
+  const currentAnalysisId = forceSetup ? null : (activeAnalysisId || prAnalysis?.id || null)
+  const { data: analysis, isLoading: isAnalysisLoading } = useAnalysis(currentAnalysisId)
+  
+  const showModelSelection = forceSetup || (!isPrAnalysisLoading && prParam && !currentAnalysisId)
 
   const analyzeMutation = useAnalyzePR()
   const unregisterMutation = useUnregisterWebhook()
@@ -256,15 +224,15 @@ export default function DashboardPage() {
   }
 
   const handleRepoClick = (repo: Repository) => {
-    setSelectedRepo(repo)
-    setShowModelSelection(false)
+    setForceSetup(false)
+    setActiveAnalysisId(null)
     updateUrl(repo.owner.login, repo.name)
   }
 
   const handlePrClick = (pr: PullRequest) => {
-    setSelectedPr(pr)
-    setShowModelSelection(true)
-    updateUrl(selectedRepo?.owner.login, selectedRepo?.name, (pr as any).number.toString())
+    setForceSetup(false)
+    setActiveAnalysisId(null)
+    updateUrl(ownerParam || selectedRepo?.owner.login, repoParam || selectedRepo?.name, (pr as any).number.toString())
   }
 
   const handleStartAnalysis = async () => {
@@ -279,26 +247,23 @@ export default function DashboardPage() {
         models: selectedModels,
         headSha: (selectedPr as any).headSha,
       })
-      setCurrentAnalysisId(result.id)
-      setShowModelSelection(false)
+      setActiveAnalysisId(result.id)
+      setForceSetup(false)
     } catch (error) {
       console.error('Failed to start analysis:', error)
     }
   }
 
   const handleBackToRepos = () => {
-    setSelectedRepo(null)
-    setSelectedPr(null)
-    setShowModelSelection(false)
-    setCurrentAnalysisId(null)
+    setForceSetup(false)
+    setActiveAnalysisId(null)
     updateUrl()
   }
 
   const handleBackToPrs = () => {
-    setSelectedPr(null)
-    setShowModelSelection(false)
-    setCurrentAnalysisId(null)
-    updateUrl(selectedRepo?.owner.login, selectedRepo?.name)
+    setForceSetup(false)
+    setActiveAnalysisId(null)
+    updateUrl(ownerParam || selectedRepo?.owner.login, repoParam || selectedRepo?.name)
   }
 
   return (
@@ -381,8 +346,8 @@ export default function DashboardPage() {
               </div>
               <Button 
                 onClick={() => {
-                  setCurrentAnalysisId(null);
-                  setShowModelSelection(true);
+                  setActiveAnalysisId(null);
+                  setForceSetup(true);
                 }} 
                 variant="outline" 
                 className="rounded-full px-8 h-12 font-black border-primary/20 hover:bg-primary/5 transition-all"
