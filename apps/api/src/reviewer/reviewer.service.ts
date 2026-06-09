@@ -24,6 +24,28 @@ export interface AIReviewResult {
 export class ReviewerService {
   private readonly logger = new Logger(ReviewerService.name);
 
+  /** File patterns to skip during analysis (binary, lock, generated files) */
+  private readonly SKIP_PATTERNS = [
+    /package-lock\.json$/,
+    /yarn\.lock$/,
+    /pnpm-lock\.yaml$/,
+    /\.min\.(js|css)$/,
+    /\.map$/,
+    /\.svg$/,
+    /\.png$/,
+    /\.jpg$/,
+    /\.jpeg$/,
+    /\.gif$/,
+    /\.ico$/,
+    /\.woff2?$/,
+    /\.ttf$/,
+    /\.eot$/,
+    /dist\//,
+    /\.d\.ts$/,
+    /\.snap$/,
+    /\.lock$/,
+  ];
+
   /**
    * Helper to get the API key for a specific model from environment
    */
@@ -77,7 +99,7 @@ export class ReviewerService {
     return new OpenAI({
       baseURL: "https://integrate.api.nvidia.com/v1",
       apiKey,
-      timeout: 900000, // 15 minutes
+      timeout: 300000, // 5 minutes safety net for larger file chunks
     });
   }
 
@@ -123,16 +145,6 @@ export class ReviewerService {
     );
     this.logger.log(`Diff size: ${diff.length} characters`);
 
-    // Truncate diff if it's too large to prevent 504 timeouts
-    let processedDiff = diff;
-    if (diff.length > 40000) {
-      this.logger.warn(
-        `Diff too large (${diff.length} chars). Truncating to 40,000 chars.`,
-      );
-      processedDiff =
-        diff.substring(0, 40000) + "\n\n... [Diff truncated due to size] ...";
-    }
-
     // 1. Create initial analysis record
     const analysis = await this.prisma.analysis.create({
       data: {
@@ -156,30 +168,121 @@ export class ReviewerService {
         "AI Agents are analyzing the code... 15%",
       );
 
-      // 2. Run analysis across 3 agents with independent error handling
-      const agentResults = await Promise.all(
-        selectedModels.map(async (model) => {
-          try {
-            const response = await this.getAgentReview(model, processedDiff);
-            return { model, status: "success", response };
-          } catch (e: any) {
-            this.logger.error(`Agent review for ${model} failed: ${e.message}`);
-            return { model, status: "failed", error: e.message };
-          }
-        }),
+      // 2. Split diff by file and filter out non-reviewable files
+      const fileChunks = this.splitDiffByFile(diff);
+      const reviewableFiles = Array.from(fileChunks.entries()).filter(
+        ([filename]) => !this.shouldSkipFile(filename),
       );
 
-      const successfulResponses = agentResults
-        .filter((r) => r.status === "success")
-        .map((r) => r.response);
+      this.logger.log(
+        `Split diff into ${fileChunks.size} files, ${reviewableFiles.length} reviewable (skipped ${fileChunks.size - reviewableFiles.length} binary/lock/generated files)`,
+      );
 
-      if (successfulResponses.length === 0) {
+      if (reviewableFiles.length === 0) {
+        this.logger.warn("No reviewable files in this diff.");
+        await this.prisma.analysis.update({
+          where: { id: analysis.id },
+          data: {
+            status: "completed",
+            qualityScore: 100,
+            securityScore: 100,
+            summary:
+              "No reviewable source files found in this PR (only lock/binary/generated files).",
+          },
+        });
+        await this.githubService.updateCommitStatus(
+          githubToken,
+          owner,
+          repoName,
+          headSha,
+          "success",
+          "No reviewable source files found.",
+        );
+        return analysis.id;
+      }
+
+      // 3. Run all agents across all file chunks in parallel
+      //    Concurrency: (reviewableFiles × models) requests fire simultaneously
+      //    Rate-limit guard: batch in groups of 10 concurrent requests
+      const CONCURRENCY_LIMIT = 10;
+      const allTasks: Array<{
+        file: string;
+        model: string;
+        promise: () => Promise<{
+          model: string;
+          status: string;
+          response?: any;
+          error?: string;
+        }>;
+      }> = [];
+
+      for (const [filename, chunk] of reviewableFiles) {
+        for (const model of selectedModels) {
+          allTasks.push({
+            file: filename,
+            model,
+            promise: async () => {
+              try {
+                const response = await this.getAgentReview(model, chunk);
+                return { model, status: "success", response };
+              } catch (e: any) {
+                this.logger.error(
+                  `Agent ${model} failed on ${filename}: ${e.message}`,
+                );
+                return { model, status: "failed", error: e.message };
+              }
+            },
+          });
+        }
+      }
+
+      // Execute in batches to respect rate limits
+      const allResults: Array<{
+        file: string;
+        model: string;
+        result: {
+          model: string;
+          status: string;
+          response?: any;
+          error?: string;
+        };
+      }> = [];
+
+      for (let i = 0; i < allTasks.length; i += CONCURRENCY_LIMIT) {
+        const batch = allTasks.slice(i, i + CONCURRENCY_LIMIT);
+        const batchResults = await Promise.all(
+          batch.map(async (task) => ({
+            file: task.file,
+            model: task.model,
+            result: await task.promise(),
+          })),
+        );
+        allResults.push(...batchResults);
+      }
+
+      // Group results by file for consensus
+      const resultsByFile = new Map<
+        string,
+        Array<{ model: string; status: string; response?: any; error?: string }>
+      >();
+      for (const { file, result } of allResults) {
+        if (!resultsByFile.has(file)) resultsByFile.set(file, []);
+        resultsByFile.get(file)!.push(result);
+      }
+
+      // Build flat agentResults array for debateLog (backward compatibility)
+      const agentResults = allResults.map((r) => r.result);
+      const successCount = agentResults.filter(
+        (r) => r.status === "success",
+      ).length;
+
+      if (successCount === 0) {
         throw new Error(
           "All AI agents failed to respond. Please check your API keys or try again later.",
         );
       }
 
-      // Check if stopped before starting synthesis
+      // Check if stopped before building consensus
       let checkAnalysis = await this.prisma.analysis.findUnique({
         where: { id: analysis.id },
         select: { status: true },
@@ -197,41 +300,11 @@ export class ReviewerService {
         repoName,
         headSha,
         "pending",
-        `Agents are debating consensus (${successfulResponses.length}/3)... 65%`,
+        `Building consensus (${successCount} successful reviews)... 75%`,
       );
 
-      // 3. Perform Consensus synthesis (Agent Debate) with fallback lead models
-      let synthesis: AIReviewResult | null = null;
-
-      // Filter models that successfully provided initial reviews
-      const candidateLeads = agentResults
-        .filter((r) => r.status === "success")
-        .map((r) => r.model);
-
-      for (const leadModel of candidateLeads) {
-        try {
-          this.logger.log(
-            `Attempting consensus synthesis with lead model: ${leadModel}`,
-          );
-          synthesis = await this.synthesizeConsensus(
-            leadModel,
-            successfulResponses,
-            processedDiff,
-          );
-          if (synthesis) break;
-        } catch (e: any) {
-          this.logger.warn(
-            `Synthesis with lead ${leadModel} failed: ${e.message}. Trying next candidate...`,
-          );
-        }
-      }
-
-      if (!synthesis) {
-        this.logger.error("All candidate lead models failed synthesis debate.");
-        // Fallback: Naive synthesis (just merge all unique findings)
-        synthesis = this.naiveSynthesis(successfulResponses);
-        this.logger.warn("Proceeding with Naive Synthesis fallback.");
-      }
+      // 4. Deterministic consensus: vote across agents per file (no LLM call!)
+      const synthesis = this.buildConsensus(resultsByFile);
 
       // Check if stopped before updating database
       checkAnalysis = await this.prisma.analysis.findUnique({
@@ -254,21 +327,7 @@ export class ReviewerService {
         "Finalizing the review report... 90%",
       );
 
-      // Filter out findings that don't have at least 2 agents agreeing
-      synthesis.findings = synthesis.findings.filter((finding) => {
-        let positiveCount = 0;
-        agentResults.forEach((agent) => {
-          if (agent.status === "success" && agent.response?.content?.findings) {
-            const match = agent.response.content.findings.find(
-              (f: any) => f.file === finding.file && f.line === finding.line,
-            );
-            if (match) positiveCount++;
-          }
-        });
-        return positiveCount >= 2;
-      });
-
-      // 4. Store findings and update analysis
+      // 5. Store findings and update analysis
       const createdFindings = await this.prisma.finding.createManyAndReturn({
         data: synthesis.findings.map((f) => ({
           analysisId: analysis.id,
@@ -296,11 +355,9 @@ export class ReviewerService {
         },
       });
 
-      // 5. Extract valid paths from diff to prevent GitHub 422 errors
+      // 6. Extract valid paths from diff to prevent GitHub 422 errors
       const validPaths = new Set(
-        Array.from(
-          processedDiff.matchAll(/^(?:\+\+\+|---) [ab]\/([^ \t\r\n]+)/gm),
-        )
+        Array.from(diff.matchAll(/^(?:\+\+\+|---) [ab]\/([^ \t\r\n]+)/gm))
           .map((m) => m[1])
           .filter(Boolean),
       );
@@ -323,11 +380,17 @@ export class ReviewerService {
           headSha,
         );
 
-        for (const [findingId, commentId] of Object.entries(commentIds)) {
-          await this.prisma.finding.update({
-            where: { id: findingId },
-            data: { githubCommentId: commentId },
-          });
+        // Batch DB writes with $transaction instead of sequential updates
+        const commentEntries = Object.entries(commentIds);
+        if (commentEntries.length > 0) {
+          await this.prisma.$transaction(
+            commentEntries.map(([findingId, commentId]) =>
+              this.prisma.finding.update({
+                where: { id: findingId },
+                data: { githubCommentId: commentId },
+              }),
+            ),
+          );
         }
       } else {
         this.logger.log(
@@ -344,7 +407,7 @@ export class ReviewerService {
         );
       }
 
-      // 6. Cross-commit comparison for resolved issues
+      // 7. Cross-commit comparison for resolved issues
       await this.resolveOldFindings(
         owner,
         repoName,
@@ -353,7 +416,7 @@ export class ReviewerService {
         githubToken,
       );
 
-      // 7. Update Status to Success
+      // 8. Update Status to Success
       await this.githubService.updateCommitStatus(
         githubToken,
         owner,
@@ -411,32 +474,25 @@ export class ReviewerService {
       `AI Request: model=${model} key=${apiKey.substring(0, 10)}... URL=https://integrate.api.nvidia.com/v1`,
     );
 
-    // Truncate diff to prevent exceeding the model's context window (max ~130k tokens)
-    const MAX_CHARS = 200000;
+    // Truncate per-file chunk to keep prompts small and fast
+    const MAX_CHUNK_CHARS = 15000;
     const safeDiff =
-      diff.length > MAX_CHARS
-        ? diff.substring(0, MAX_CHARS) +
-          "\n\n...[DIFF TRUNCATED DUE TO LENGTH]..."
+      diff.length > MAX_CHUNK_CHARS
+        ? diff.substring(0, MAX_CHUNK_CHARS) +
+          "\n\n...[FILE DIFF TRUNCATED — showing first 15K chars]..."
         : diff;
 
-    const prompt = `You are a Senior Security and Code Quality Engineer. 
-Review the following code diff and identify critical issues, vulnerabilities, and quality improvements.
-Focus on:
-1. OWASP Top 10 vulnerabilities.
-2. Performance bottlenecks.
-3. Clean code and architectural patterns.
+    const prompt = `You are a strict, robotic Code Review Agent.
+Analyze the following CODE DIFF for security vulnerabilities, performance bottlenecks, and code quality issues.
 
 CODE DIFF:
 ${safeDiff}
 
-IMPORTANT: Your response must be STABLE, VALID JSON.
-1. Use double quotes for all keys and strings.
-2. ESCAPE all backslashes as \\\\ and double quotes as \\\".
-3. Do NOT use literal newlines inside strings.
-4. DO NOT use markdown tables, bullet points, or any other formatting.
-5. Output ONLY the raw JSON object. Do not include any preamble, postamble, or explanation.
-6. The response MUST start with { and end with }.
-7. CRITICAL: The "reference" MUST be a highly reputable, real, and valid URL (e.g., OWASP, MDN, official language documentation). DO NOT hallucinate highly specific URLs that result in 404 Not Found. If you are unsure of a specific URL, provide a link to the top-level documentation or a well-known resource that contains details related to the vulnerability, fix, or code updates.
+IMPORTANT JSON INSTRUCTIONS:
+1. You MUST output ONLY valid JSON.
+2. You MUST NOT wrap the JSON in markdown blocks like \`\`\`json.
+3. You MUST use exactly the schema provided below. Do not add keys like "critical_issues".
+4. The "reference" must be a real, valid URL.
 
 Return your response in strict JSON format:
 {
@@ -459,11 +515,11 @@ Return your response in strict JSON format:
             {
               role: "system",
               content:
-                "You are a Senior Engineer. Output ONLY valid JSON. No markdown, no code blocks, no explanation. IMPORTANT: Escape all backslashes as \\\\ and ensure all newlines inside strings are escaped as \\n. The response MUST be a single parseable JSON object.",
+                "You are an AI code reviewer that outputs ONLY raw JSON. You must strictly follow the requested JSON schema. Never include markdown code blocks. Never include explanations. Use double quotes for all JSON properties.",
             },
             { role: "user", content: prompt },
           ],
-          max_tokens: 3000,
+          max_tokens: 2000,
           temperature: 0.1,
         });
         break;
@@ -479,7 +535,7 @@ Return your response in strict JSON format:
             `Agent review for ${modelId} failed (${error.message}), retrying... (${retries} left)`,
           );
           retries--;
-          await new Promise((resolve) => setTimeout(resolve, 5000));
+          await new Promise((resolve) => setTimeout(resolve, 2000));
           continue;
         }
         throw error;
@@ -495,93 +551,101 @@ Return your response in strict JSON format:
     };
   }
 
-  private async synthesizeConsensus(
-    modelId: string,
-    agentResponses: any[],
-    diff: string,
-  ): Promise<AIReviewResult> {
-    const client = this.getClient(modelId);
-    const model = this.MODEL_MAPPING[modelId] || modelId;
+  /**
+   * Splits a unified diff into per-file chunks.
+   * Returns a Map of filename → diff content for that file.
+   */
+  private splitDiffByFile(diff: string): Map<string, string> {
+    const files = new Map<string, string>();
+    const filePattern = /^diff --git a\/\S+ b\/(\S+)$/gm;
+    let match: RegExpExecArray | null;
+    const positions: Array<{ file: string; start: number }> = [];
 
-    const MAX_CHARS = 200000;
-    const safeDiff =
-      diff.length > MAX_CHARS
-        ? diff.substring(0, MAX_CHARS) +
-          "\n\n...[DIFF TRUNCATED DUE TO LENGTH]..."
-        : diff;
+    while ((match = filePattern.exec(diff)) !== null) {
+      positions.push({ file: match[1], start: match.index });
+    }
 
-    const prompt = `You are the Lead Consensus Architect. 
-You have 3 independent AI agent reviews of a code change. 
-Your task is to debate their findings, resolve conflicts, and synthesize the final "Truth" (Consensus).
+    // If no diff headers found, treat the whole diff as a single chunk
+    if (positions.length === 0) {
+      files.set("unknown", diff);
+      return files;
+    }
 
-AGENT REVIEWS:
-${JSON.stringify(agentResponses, null, 2)}
+    for (let i = 0; i < positions.length; i++) {
+      const end =
+        i + 1 < positions.length ? positions[i + 1].start : diff.length;
+      files.set(positions[i].file, diff.substring(positions[i].start, end));
+    }
 
-ORIGINAL DIFF:
-${safeDiff}
+    return files;
+  }
 
-Instructions:
-1. Only include findings where at least 2 agents agree, or 1 agent provides an extremely compelling security critical case.
-2. Deduplicate similar findings.
-3. Calculate the final Quality and Security scores.
-4. Provide a high-level summary of the "Debate" and final verdict.
-5. IMPORTANT: Output ONLY the JSON object. Do not include any text before or after.
-6. IMPORTANT: Ensure the JSON is valid. Escape all backslashes as \\\\ and double quotes as \\\".
-7. IMPORTANT: Do not include literal newlines inside JSON strings.
-8. CRITICAL: For the "reference", ensure you select the most reputable, real, and valid URL from the agents. DO NOT include hallucinated URLs that result in 404 Not Found. Provide links to top-level, official documentation related to the vulnerability or code updates.
+  /**
+   * Returns true if a file should be skipped (binary, lock, generated, etc.)
+   */
+  private shouldSkipFile(filename: string): boolean {
+    return this.SKIP_PATTERNS.some((p) => p.test(filename));
+  }
 
-Return your response in strict JSON format:
-{
-  "findings": [
-    { "file": "string", "line": number, "issue": "string", "type": "Critical|Vulnerability|Warning|Info", "confidence": "High|Medium|Low", "rationale": "string", "resolution": "string", "reference": "URL (MUST be a real, valid link)" }
-  ],
-  "qualityScore": number,
-  "securityScore": number,
-  "summary": "string"
-}`;
+  /**
+   * Deterministic consensus builder. Replaces the expensive LLM synthesis call.
+   * Votes across agents: only includes findings confirmed by ≥2 agents.
+   * Uses fuzzy matching (same file + nearby line ±5 + same type) for dedup.
+   */
+  private buildConsensus(
+    resultsByFile: Map<
+      string,
+      Array<{ model: string; status: string; response?: any; error?: string }>
+    >,
+  ): AIReviewResult {
+    const findingMap = new Map<string, { finding: any; votes: number }>();
+    let qualityTotal = 0;
+    let securityTotal = 0;
+    let agentCount = 0;
 
-    let completion;
-    let retries = 2;
+    for (const [, agentResults] of resultsByFile) {
+      for (const agent of agentResults) {
+        if (agent.status !== "success" || !agent.response?.content) continue;
+        const content = agent.response.content;
 
-    while (retries >= 0) {
-      try {
-        completion = await client.chat.completions.create({
-          model,
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are a Lead Architect. Synthesize agent findings into a single JSON object. Be extremely concise. No preamble. No postamble.",
-            },
-            { role: "user", content: prompt },
-          ],
-          max_tokens: 3000,
-          temperature: 0.1,
-        });
-        break;
-      } catch (error: any) {
-        const isConnectionError =
-          error.message?.toLowerCase().includes("connection") ||
-          error.message?.toLowerCase().includes("timeout") ||
-          error.status === 504 ||
-          error.status === 502;
+        qualityTotal += content.qualityScore || 0;
+        securityTotal += content.securityScore || 0;
+        agentCount++;
 
-        if (isConnectionError && retries > 0) {
-          this.logger.warn(
-            `Synthesis for ${modelId} failed (${error.message}), retrying... (${retries} left)`,
-          );
-          retries--;
-          await new Promise((resolve) => setTimeout(resolve, 5000)); // Wait 5s
-          continue;
+        for (const f of content.findings || []) {
+          // Fuzzy key: same file + nearby line (±5) + same type
+          const lineGroup = Math.round((f.line || 0) / 5) * 5;
+          const key = `${f.file}:${lineGroup}:${f.type}`;
+          const existing = findingMap.get(key);
+          if (existing) {
+            existing.votes++;
+            // Keep the finding with the longest rationale (most detailed)
+            if (
+              f.rationale &&
+              f.rationale.length > (existing.finding.rationale?.length || 0)
+            ) {
+              existing.finding = f;
+            }
+          } else {
+            findingMap.set(key, { finding: f, votes: 1 });
+          }
         }
-        throw error;
       }
     }
 
-    const content = completion.choices[0].message.content || "{}";
-    const cleanContent = this.extractJsonBlock(content);
+    // Only include findings with ≥2 agent agreement
+    const findings = Array.from(findingMap.values())
+      .filter((entry) => entry.votes >= 2)
+      .map((entry) => entry.finding);
 
-    return this.safeJsonParse(cleanContent);
+    const fileCount = resultsByFile.size;
+
+    return {
+      findings,
+      qualityScore: Math.round(qualityTotal / (agentCount || 1)),
+      securityScore: Math.round(securityTotal / (agentCount || 1)),
+      summary: `Consensus from ${agentCount} agent reviews across ${fileCount} files. ${findings.length} issues confirmed by multi-agent agreement.`,
+    };
   }
 
   /**
