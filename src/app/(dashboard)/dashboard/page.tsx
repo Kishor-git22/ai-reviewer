@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
-import { useAnalysis, useAnalyzePR, useRegisterWebhook, useActiveRepos, useUserSettings, useAnalysisByPr, useAnalysisHistory } from '@/hooks/usePrAnalysis'
+import { useAnalysis, useAnalyzePR, useRegisterWebhook, useUnregisterWebhook, useActiveRepos, useUserSettings, useAnalysisByPr, useAnalysisHistory } from '@/hooks/usePrAnalysis'
 import { useRepos, useRepoPRs } from '@/hooks/useGitHub'
 import { AnalysisView } from '@/components/dashboard/AnalysisView'
 import { NVIDIA_MODELS } from '@/components/dashboard/ModelSelector'
@@ -209,15 +209,23 @@ export default function DashboardPage() {
   }, [selectedPr, prAnalysis])
 
   const analyzeMutation = useAnalyzePR()
+  const unregisterMutation = useUnregisterWebhook()
 
   const handleToggleActive = async (repo: Repository) => {
     try {
-      await registerMutation.mutateAsync({
-        owner: repo.owner.login,
-        repo: repo.name,
-      })
+      if (activeRepos?.some(ar => ar.name === repo.name && ar.isActive)) {
+        await unregisterMutation.mutateAsync({
+          owner: repo.owner.login,
+          repo: repo.name,
+        })
+      } else {
+        await registerMutation.mutateAsync({
+          owner: repo.owner.login,
+          repo: repo.name,
+        })
+      }
     } catch (error) {
-      console.error('Failed to activate Prism:', error)
+      console.error('Failed to toggle Prism active state:', error)
     }
   }
 

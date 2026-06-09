@@ -173,6 +173,33 @@ export function useRegisterWebhook() {
   })
 }
 
+// Hook to unregister a webhook
+export function useUnregisterWebhook() {
+  const { data: session } = useSession()
+  const token = session?.user?.accessToken
+  const githubToken = session?.user?.githubToken
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (data: { owner: string; repo: string }) => {
+      const response = await fetch(`${API_URL}/webhooks/unregister/${data.owner}/${data.repo}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ githubToken }),
+      })
+
+      if (!response.ok) throw new Error('Failed to unregister webhook')
+      return response.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['active-repos'] })
+    },
+  })
+}
+
 // Hook to fetch active repos
 export function useActiveRepos() {
   const { data: session } = useSession()
