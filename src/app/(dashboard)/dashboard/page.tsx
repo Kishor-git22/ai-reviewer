@@ -324,12 +324,12 @@ export default function DashboardPage() {
           <p className="text-sm font-bold text-muted-foreground">
             {currentAnalysisId 
               ? (analysis?.status === 'completed' || (analysisHistory && analysisHistory.some(a => a.status === 'completed')))
-                ? `Comprehensive analysis for PR #${(selectedPr as any).number}`
+                ? `Comprehensive analysis for PR #${(selectedPr as any)?.number || searchParams.get('pr')}`
                 : analysis?.status === 'stopped'
-                  ? `Analysis stopped for PR #${(selectedPr as any).number}`
+                  ? `Analysis stopped for PR #${(selectedPr as any)?.number || searchParams.get('pr')}`
                   : analysis?.status === 'failed'
-                    ? `Analysis failed for PR #${(selectedPr as any).number}`
-                    : `Multi-agent debate in progress for #${(selectedPr as any).number}`
+                    ? `Analysis failed for PR #${(selectedPr as any)?.number || searchParams.get('pr')}`
+                    : `Multi-agent debate in progress for #${(selectedPr as any)?.number || searchParams.get('pr')}`
               : selectedPr 
                 ? 'Configure your AI agents for this review.'
                 : selectedRepo 
