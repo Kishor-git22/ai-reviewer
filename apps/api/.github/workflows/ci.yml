@@ -28,7 +28,7 @@ jobs:
         run: npx prisma generate
 
       - name: Dependency Vulnerability Audit
-        run: npm audit || true
+        run: npm audit
 
       - name: Check Formatting
         run: npm run format:check
