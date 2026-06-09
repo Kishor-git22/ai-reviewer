@@ -27,15 +27,6 @@ function LandingContent() {
   const searchParams = useSearchParams()
   const error = searchParams.get('error')
 
-  useEffect(() => {
-    if (error) {
-      toast.error(getErrorMessage(error), {
-        description: 'Please try again or contact support if the issue persists.',
-        duration: 5000,
-      })
-    }
-  }, [error])
-
   const getErrorMessage = (error: string) => {
     switch (error) {
       case 'OAuthSignin':
@@ -56,6 +47,15 @@ function LandingContent() {
         return 'An unexpected error occurred. Please try again.'
     }
   }
+
+  useEffect(() => {
+    if (error) {
+      toast.error(getErrorMessage(error), {
+        description: 'Please try again or contact support if the issue persists.',
+        duration: 5000,
+      })
+    }
+  }, [error])
 
   const handleLogin = async () => {
     setIsLoading(true)
