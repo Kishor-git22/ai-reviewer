@@ -27,7 +27,9 @@ export default function SettingsPage() {
 
     try {
       await updateMutation.mutateAsync({ selectedModels })
-      toast.success('Settings saved successfully! These models will now be used for all automatic PR reviews.')
+      toast.success(
+        'Settings saved successfully! These models will now be used for all automatic PR reviews.'
+      )
     } catch (error) {
       toast.error('Failed to save settings')
     }
@@ -54,7 +56,8 @@ export default function SettingsPage() {
           </h1>
         </div>
         <p className="max-w-2xl text-lg font-bold text-muted-foreground">
-          Configure your autonomous AI team. These selected models will collaborate to review every Pull Request in your activated repositories.
+          Configure your autonomous AI team. These selected models will collaborate to review every
+          Pull Request in your activated repositories.
         </p>
       </div>
 
@@ -64,21 +67,27 @@ export default function SettingsPage() {
           <CardContent className="pt-6">
             <ShieldCheck className="mb-4 h-8 w-8 text-green-400" />
             <h3 className="text-sm font-black text-foreground">Consensus Driven</h3>
-            <p className="mt-1 text-xs font-bold text-muted-foreground">Multiple perspectives ensure high precision and low false positives.</p>
+            <p className="mt-1 text-xs font-bold text-muted-foreground">
+              Multiple perspectives ensure high precision and low false positives.
+            </p>
           </CardContent>
         </Card>
         <Card className="border-border/50 bg-card/50 backdrop-blur-xl">
           <CardContent className="pt-6">
             <Zap className="mb-4 h-8 w-8 text-yellow-400" />
             <h3 className="text-sm font-black text-foreground">Zero-Config CI</h3>
-            <p className="mt-1 text-xs font-bold text-muted-foreground">Once configured, reviews happen automatically on every PR push.</p>
+            <p className="mt-1 text-xs font-bold text-muted-foreground">
+              Once configured, reviews happen automatically on every PR push.
+            </p>
           </CardContent>
         </Card>
         <Card className="border-border/50 bg-card/50 backdrop-blur-xl">
           <CardContent className="pt-6">
             <MessageSquare className="mb-4 h-8 w-8 text-blue-400" />
             <h3 className="text-sm font-black text-foreground">Agent Debate</h3>
-            <p className="mt-1 text-xs font-bold text-muted-foreground">Agents interact to resolve conflicts before posting the final verdict.</p>
+            <p className="mt-1 text-xs font-bold text-muted-foreground">
+              Agents interact to resolve conflicts before posting the final verdict.
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -86,13 +95,13 @@ export default function SettingsPage() {
       {/* Model Selection Section */}
       <div className="space-y-8">
         <ModelSelector selectedModels={selectedModels} onChange={setSelectedModels} />
-        
+
         <div className="flex items-center justify-between rounded-[2.5rem] border border-border/50 bg-card/50 p-6 backdrop-blur-xl">
           <div className="hidden sm:block">
             <p className="text-sm font-black text-foreground">
               Selected Team: <span className="text-primary">{selectedModels.length} / 3</span>
             </p>
-            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
               Exactly 3 agents required for consensus debate
             </p>
           </div>

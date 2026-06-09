@@ -15,12 +15,15 @@ export function useRepos() {
     queryFn: async (): Promise<Repository[]> => {
       if (!githubToken) return []
 
-      const response = await fetch(`${GITHUB_API_BASE}/user/repos?sort=updated&per_page=100&type=all`, {
-        headers: {
-          Authorization: `Bearer ${githubToken}`,
-          Accept: 'application/vnd.github.v3+json',
-        },
-      })
+      const response = await fetch(
+        `${GITHUB_API_BASE}/user/repos?sort=updated&per_page=100&type=all`,
+        {
+          headers: {
+            Authorization: `Bearer ${githubToken}`,
+            Accept: 'application/vnd.github.v3+json',
+          },
+        }
+      )
 
       if (!response.ok) {
         throw new Error('Failed to fetch repositories')
@@ -63,13 +66,13 @@ export function useRepoPRs(owner?: string, repo?: string) {
       if (token) {
         try {
           const statusRes = await fetch(`${API_URL}/reviewer/repo/${repo}/prs/status`, {
-            headers: { Authorization: `Bearer ${token}` }
+            headers: { Authorization: `Bearer ${token}` },
           })
           if (statusRes.ok) {
             statuses = await statusRes.json()
           }
         } catch (e) {
-          console.error("Failed to fetch backend PR statuses", e)
+          console.error('Failed to fetch backend PR statuses', e)
         }
       }
 

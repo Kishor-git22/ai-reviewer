@@ -91,7 +91,9 @@ export function ModelSelector({ selectedModels, onChange }: ModelSelectorProps) 
       <div className="flex items-center justify-between">
         <div className="space-y-0.5">
           <h3 className="text-lg font-black tracking-tight text-foreground">Select AI Agents</h3>
-          <p className="text-xs font-bold text-muted-foreground">Choose 3 models to perform the multi-agent debate.</p>
+          <p className="text-xs font-bold text-muted-foreground">
+            Choose 3 models to perform the multi-agent debate.
+          </p>
         </div>
         <Badge variant="secondary" className="rounded-full px-3 py-1 font-black">
           {selectedModels.length} / 3 Selected
@@ -109,13 +111,13 @@ export function ModelSelector({ selectedModels, onChange }: ModelSelectorProps) 
               className={cn(
                 'group relative cursor-pointer overflow-hidden border-border/50 bg-card/50 transition-all hover:border-primary/50',
                 isSelected && 'border-primary ring-1 ring-primary',
-                isDisabled && 'opacity-50 grayscale cursor-not-allowed'
+                isDisabled && 'cursor-not-allowed opacity-50 grayscale'
               )}
               onClick={() => !isDisabled && toggleModel(model.id)}
             >
               <CardContent className="p-4">
                 <div className="flex items-start justify-between">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/50 text-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/50 text-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
                     <Cpu size={20} />
                   </div>
                   {isSelected && (
@@ -127,11 +129,14 @@ export function ModelSelector({ selectedModels, onChange }: ModelSelectorProps) 
                 <div className="mt-4">
                   <div className="flex items-center gap-2">
                     <span className="font-black text-foreground">{model.name}</span>
-                    <Badge variant="outline" className="text-[8px] uppercase font-black tracking-widest px-1.5 py-0">
+                    <Badge
+                      variant="outline"
+                      className="px-1.5 py-0 text-[8px] font-black uppercase tracking-widest"
+                    >
                       {model.provider}
                     </Badge>
                   </div>
-                  <p className="mt-2 text-[10px] leading-relaxed font-bold text-muted-foreground">
+                  <p className="mt-2 text-[10px] font-bold leading-relaxed text-muted-foreground">
                     {model.description}
                   </p>
                   <div className="mt-3 flex items-center gap-1.5">

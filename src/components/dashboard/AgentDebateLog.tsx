@@ -122,7 +122,9 @@ export function AgentDebateLog({ finding, children }: AgentDebateLogProps) {
                   <div className="mb-4 rounded-full bg-muted p-4 text-muted-foreground">
                     <Info className="h-8 w-8" />
                   </div>
-                  <p className="text-sm text-muted-foreground">No detailed agent logs available for this finding.</p>
+                  <p className="text-sm text-muted-foreground">
+                    No detailed agent logs available for this finding.
+                  </p>
                 </div>
               )}
               {reasonings.map((reasoning) => (
