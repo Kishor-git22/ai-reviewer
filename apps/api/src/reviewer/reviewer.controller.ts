@@ -1,10 +1,19 @@
-import { Controller, Post, Body, Get, Param, UseGuards, Request, Patch } from '@nestjs/common';
-import { ReviewerService } from './reviewer.service';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { PrismaService } from '../prisma/prisma.service';
-import { Octokit } from 'octokit';
+import {
+  Controller,
+  Post,
+  Body,
+  Get,
+  Param,
+  UseGuards,
+  Request,
+  Patch,
+} from "@nestjs/common";
+import { ReviewerService } from "./reviewer.service";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { PrismaService } from "../prisma/prisma.service";
+import { Octokit } from "octokit";
 
-@Controller('reviewer')
+@Controller("reviewer")
 export class ReviewerController {
   constructor(
     private readonly reviewerService: ReviewerService,
@@ -12,19 +21,20 @@ export class ReviewerController {
   ) {}
 
   @UseGuards(JwtAuthGuard)
-  @Post('analyze')
+  @Post("analyze")
   async analyzePR(
     @Request() req,
-    @Body() body: { 
-      repoName: string; 
-      prNumber: number; 
-      title: string; 
+    @Body()
+    body: {
+      repoName: string;
+      prNumber: number;
+      title: string;
       diff: string;
       models?: string[];
       githubToken: string;
       owner: string;
       headSha: string;
-    }
+    },
   ) {
     return this.reviewerService.performDebateReview(
       req.user.id,
@@ -40,11 +50,8 @@ export class ReviewerController {
   }
 
   @UseGuards(JwtAuthGuard)
-  @Get('analysis/:id')
-  async getAnalysis(
-    @Request() req,
-    @Param('id') id: string,
-  ) {
+  @Get("analysis/:id")
+  async getAnalysis(@Request() req, @Param("id") id: string) {
     const analysis = await this.prisma.analysis.findUnique({
       where: { id },
       include: { findings: true },
@@ -52,7 +59,7 @@ export class ReviewerController {
 
     if (!analysis) return null;
 
-    if (analysis.status === 'in_progress' || analysis.status === 'pending') {
+    if (analysis.status === "in_progress" || analysis.status === "pending") {
       try {
         const repoRecord = await this.prisma.repository.findFirst({
           where: { name: analysis.repoName, userId: analysis.userId },
@@ -70,12 +77,13 @@ export class ReviewerController {
             pull_number: analysis.prNumber,
           });
 
-          if (pr && pr.state === 'closed') {
+          if (pr && pr.state === "closed") {
             const updatedAnalysis = await this.prisma.analysis.update({
               where: { id: analysis.id },
               data: {
-                status: 'stopped',
-                summary: 'The AI analysis has been stopped because the pull request has been closed.',
+                status: "stopped",
+                summary:
+                  "The AI analysis has been stopped because the pull request has been closed.",
               },
               include: { findings: true },
             });
@@ -86,18 +94,22 @@ export class ReviewerController {
                 repoRecord.owner,
                 analysis.repoName,
                 pr.head.sha,
-                'failure',
-                'AI Analysis stopped - Pull request closed.',
+                "failure",
+                "AI Analysis stopped - Pull request closed.",
               );
             } catch (statusErr) {
-              this.reviewerService['logger'].error(`Failed to update status on dynamic abort: ${statusErr.message}`);
+              this.reviewerService["logger"].error(
+                `Failed to update status on dynamic abort: ${statusErr.message}`,
+              );
             }
 
             return updatedAnalysis;
           }
         }
       } catch (err: any) {
-        this.reviewerService['logger'].error(`Failed dynamic PR status check: ${err.message}`);
+        this.reviewerService["logger"].error(
+          `Failed dynamic PR status check: ${err.message}`,
+        );
       }
     }
 
@@ -105,21 +117,21 @@ export class ReviewerController {
   }
 
   @UseGuards(JwtAuthGuard)
-  @Get('repo/:repoName/pr/:prNumber/analysis')
+  @Get("repo/:repoName/pr/:prNumber/analysis")
   async getAnalysisByPr(
     @Request() req,
-    @Param('repoName') repoName: string,
-    @Param('prNumber') prNumber: string,
+    @Param("repoName") repoName: string,
+    @Param("prNumber") prNumber: string,
   ) {
     const analysis = await this.prisma.analysis.findFirst({
       where: { repoName, prNumber: parseInt(prNumber, 10) },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       include: { findings: true },
     });
 
     if (!analysis) return null;
 
-    if (analysis.status === 'in_progress' || analysis.status === 'pending') {
+    if (analysis.status === "in_progress" || analysis.status === "pending") {
       try {
         const repoRecord = await this.prisma.repository.findFirst({
           where: { name: repoName, userId: analysis.userId },
@@ -137,12 +149,13 @@ export class ReviewerController {
             pull_number: parseInt(prNumber, 10),
           });
 
-          if (pr && pr.state === 'closed') {
+          if (pr && pr.state === "closed") {
             const updatedAnalysis = await this.prisma.analysis.update({
               where: { id: analysis.id },
               data: {
-                status: 'stopped',
-                summary: 'The AI analysis has been stopped because the pull request has been closed.',
+                status: "stopped",
+                summary:
+                  "The AI analysis has been stopped because the pull request has been closed.",
               },
               include: { findings: true },
             });
@@ -153,18 +166,22 @@ export class ReviewerController {
                 repoRecord.owner,
                 repoName,
                 pr.head.sha,
-                'failure',
-                'AI Analysis stopped - Pull request closed.',
+                "failure",
+                "AI Analysis stopped - Pull request closed.",
               );
             } catch (statusErr) {
-              this.reviewerService['logger'].error(`Failed to update status on dynamic abort: ${statusErr.message}`);
+              this.reviewerService["logger"].error(
+                `Failed to update status on dynamic abort: ${statusErr.message}`,
+              );
             }
 
             return this.mapAgentReasonings(updatedAnalysis);
           }
         }
       } catch (err: any) {
-        this.reviewerService['logger'].error(`Failed dynamic PR status check: ${err.message}`);
+        this.reviewerService["logger"].error(
+          `Failed dynamic PR status check: ${err.message}`,
+        );
       }
     }
 
@@ -172,38 +189,38 @@ export class ReviewerController {
   }
 
   @UseGuards(JwtAuthGuard)
-  @Get('repo/:repoName/pr/:prNumber/history')
+  @Get("repo/:repoName/pr/:prNumber/history")
   async getPrAnalysisHistory(
-    @Param('repoName') repoName: string,
-    @Param('prNumber') prNumber: string,
+    @Param("repoName") repoName: string,
+    @Param("prNumber") prNumber: string,
   ) {
     const analyses = await this.prisma.analysis.findMany({
       where: { repoName, prNumber: parseInt(prNumber, 10) },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       include: { findings: true },
     });
-    return analyses.map(a => this.mapAgentReasonings(a));
+    return analyses.map((a) => this.mapAgentReasonings(a));
   }
 
-  @Get('repo/:repoName/pr/:prNumber/status')
+  @Get("repo/:repoName/pr/:prNumber/status")
   async getStatusByPr(
-    @Param('repoName') repoName: string,
-    @Param('prNumber') prNumber: string,
+    @Param("repoName") repoName: string,
+    @Param("prNumber") prNumber: string,
   ) {
     const analysis = await this.prisma.analysis.findFirst({
       where: { repoName, prNumber: parseInt(prNumber, 10) },
-      orderBy: { createdAt: 'desc' },
-      select: { 
+      orderBy: { createdAt: "desc" },
+      select: {
         status: true,
         models: true,
         createdAt: true,
       },
     });
-    return this.mapAgentReasonings(analysis) || { status: 'not_found' };
+    return this.mapAgentReasonings(analysis) || { status: "not_found" };
   }
 
   @UseGuards(JwtAuthGuard)
-  @Get('settings')
+  @Get("settings")
   async getSettings(@Request() req) {
     const user = await this.prisma.user.findUnique({
       where: { id: req.user.id },
@@ -213,8 +230,11 @@ export class ReviewerController {
   }
 
   @UseGuards(JwtAuthGuard)
-  @Patch('settings')
-  async updateSettings(@Request() req, @Body() body: { selectedModels: string[] }) {
+  @Patch("settings")
+  async updateSettings(
+    @Request() req,
+    @Body() body: { selectedModels: string[] },
+  ) {
     return this.prisma.user.update({
       where: { id: req.user.id },
       data: { selectedModels: body.selectedModels },
@@ -222,23 +242,21 @@ export class ReviewerController {
   }
 
   @UseGuards(JwtAuthGuard)
-  @Get('active-repos')
+  @Get("active-repos")
   async getActiveRepos(@Request() req) {
     return this.prisma.repository.findMany({
-      where: { 
+      where: {
         userId: req.user.id,
-        isActive: true
+        isActive: true,
       },
     });
   }
   @UseGuards(JwtAuthGuard)
-  @Get('repo/:repoName/prs/status')
-  async getRepoPrsStatus(
-    @Param('repoName') repoName: string,
-  ) {
+  @Get("repo/:repoName/prs/status")
+  async getRepoPrsStatus(@Param("repoName") repoName: string) {
     const analyses = await this.prisma.analysis.findMany({
       where: { repoName },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       include: { findings: true },
     });
 
@@ -248,18 +266,20 @@ export class ReviewerController {
         latestByPr[analysis.prNumber] = {
           status: analysis.status,
           qualityScore: analysis.qualityScore,
-          vuls: analysis.findings.filter(f => f.type === 'Vulnerability' || f.type === 'Critical').length,
+          vuls: analysis.findings.filter(
+            (f) => f.type === "Vulnerability" || f.type === "Critical",
+          ).length,
           recs: analysis.findings.length,
         };
       }
     }
     return latestByPr;
   }
-  @Get('history')
+  @Get("history")
   async getHistory(@Request() req) {
     return this.prisma.analysis.findMany({
       where: { userId: req.user.id },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
   }
 
@@ -267,35 +287,46 @@ export class ReviewerController {
     if (analysis && analysis.findings && analysis.debateLog) {
       const debateLog: any = analysis.debateLog;
       if (debateLog.agents && Array.isArray(debateLog.agents)) {
-        analysis.findings = analysis.findings.map(finding => {
-          const agentReasonings = debateLog.agents.map(agent => {
+        analysis.findings = analysis.findings.map((finding) => {
+          const agentReasonings = debateLog.agents.map((agent) => {
             const agentFinding = agent.response?.content?.findings?.find(
-              f => f.file === finding.file && f.line === finding.line
+              (f) => f.file === finding.file && f.line === finding.line,
             );
-            
+
             if (agentFinding) {
               return {
                 agentId: agent.model,
                 agentName: agent.model,
-                verdict: 'positive',
-                reasoning: agentFinding.rationale || agentFinding.issue || 'Identified the issue.',
-                confidence: agentFinding.confidence === 'High' ? 0.9 : agentFinding.confidence === 'Medium' ? 0.6 : 0.3
+                verdict: "positive",
+                reasoning:
+                  agentFinding.rationale ||
+                  agentFinding.issue ||
+                  "Identified the issue.",
+                confidence:
+                  agentFinding.confidence === "High"
+                    ? 0.9
+                    : agentFinding.confidence === "Medium"
+                      ? 0.6
+                      : 0.3,
               };
             } else {
               return {
                 agentId: agent.model,
                 agentName: agent.model,
-                verdict: 'negative',
-                reasoning: 'The agent did not flag any issue on this specific line.',
-                confidence: 0.8
+                verdict: "negative",
+                reasoning:
+                  "The agent did not flag any issue on this specific line.",
+                confidence: 0.8,
               };
             }
           });
-          
+
           return {
             ...finding,
             agentReasonings,
-            consensus: agentReasonings.filter(r => r.verdict === 'positive').length > 1
+            consensus:
+              agentReasonings.filter((r) => r.verdict === "positive").length >
+              1,
           };
         });
       }
@@ -303,4 +334,3 @@ export class ReviewerController {
     return analysis;
   }
 }
-

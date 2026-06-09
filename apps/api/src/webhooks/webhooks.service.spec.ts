@@ -1,7 +1,7 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { WebhooksService } from './webhooks.service';
+import { Test, TestingModule } from "@nestjs/testing";
+import { WebhooksService } from "./webhooks.service";
 
-describe('WebhooksService', () => {
+describe("WebhooksService", () => {
   let service: WebhooksService;
 
   beforeEach(async () => {
@@ -12,7 +12,7 @@ describe('WebhooksService', () => {
     service = module.get<WebhooksService>(WebhooksService);
   });
 
-  it('should be defined', () => {
+  it("should be defined", () => {
     expect(service).toBeDefined();
   });
 });

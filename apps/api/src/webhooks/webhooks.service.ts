@@ -1,8 +1,8 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { ReviewerService } from '../reviewer/reviewer.service';
-import { Octokit } from 'octokit';
-import { ConfigService } from '@nestjs/config';
+import { Injectable, Logger } from "@nestjs/common";
+import { PrismaService } from "../prisma/prisma.service";
+import { ReviewerService } from "../reviewer/reviewer.service";
+import { Octokit } from "octokit";
+import { ConfigService } from "@nestjs/config";
 
 @Injectable()
 export class WebhooksService {
@@ -17,11 +17,18 @@ export class WebhooksService {
   /**
    * Register a webhook on a GitHub repository
    */
-  async registerWebhook(userId: string, owner: string, repo: string, githubToken: string) {
+  async registerWebhook(
+    userId: string,
+    owner: string,
+    repo: string,
+    githubToken: string,
+  ) {
     const octokit = new Octokit({ auth: githubToken });
-    const webhookUrl = `${this.configService.get('APP_URL')}/webhooks/github`;
+    const webhookUrl = `${this.configService.get("APP_URL")}/webhooks/github`;
 
-    this.logger.log(`Registering webhook for ${owner}/${repo} at ${webhookUrl}`);
+    this.logger.log(
+      `Registering webhook for ${owner}/${repo} at ${webhookUrl}`,
+    );
 
     try {
       const response = await octokit.rest.repos.createWebhook({
@@ -29,10 +36,10 @@ export class WebhooksService {
         repo,
         config: {
           url: webhookUrl,
-          content_type: 'json',
+          content_type: "json",
           // secret: 'your-webhook-secret', // Should be in env
         },
-        events: ['pull_request'],
+        events: ["pull_request"],
         active: true,
       });
 
@@ -56,11 +63,13 @@ export class WebhooksService {
       return response.data;
     } catch (error) {
       // If hook already exists, we consider it a success and just sync our DB
-      if (error.message?.includes('Hook already exists')) {
-        this.logger.log(`Webhook already exists for ${owner}/${repo}, syncing database...`);
-        
+      if (error.message?.includes("Hook already exists")) {
+        this.logger.log(
+          `Webhook already exists for ${owner}/${repo}, syncing database...`,
+        );
+
         // We still need to track it in our database
-        // Since we don't have the ID from the failed create call, 
+        // Since we don't have the ID from the failed create call,
         // we'll try to find the existing hook ID or use a placeholder if needed.
         // For simplicity, we'll just upsert without the response ID if it's already there.
         await this.prisma.repository.upsert({
@@ -76,7 +85,7 @@ export class WebhooksService {
             isActive: true,
           },
         });
-        return { message: 'Webhook already active' };
+        return { message: "Webhook already active" };
       }
 
       this.logger.error(`Failed to register webhook: ${error.message}`);
@@ -87,30 +96,35 @@ export class WebhooksService {
   /**
    * Unregister a webhook on a GitHub repository
    */
-  async unregisterWebhook(userId: string, owner: string, repo: string, githubToken: string) {
+  async unregisterWebhook(
+    userId: string,
+    owner: string,
+    repo: string,
+    githubToken: string,
+  ) {
     const octokit = new Octokit({ auth: githubToken });
-    
+
     try {
       const repoRecord = await this.prisma.repository.findFirst({
-        where: { name: repo, owner, userId }
+        where: { name: repo, owner, userId },
       });
-      
+
       if (repoRecord && repoRecord.webhookId) {
         try {
           await octokit.rest.repos.deleteWebhook({
             owner,
             repo,
-            hook_id: parseInt(repoRecord.webhookId)
+            hook_id: parseInt(repoRecord.webhookId),
           });
           this.logger.log(`Deleted webhook from GitHub for ${owner}/${repo}`);
         } catch (e) {
           this.logger.warn(`Could not delete webhook on github: ${e.message}`);
         }
       }
-      
+
       await this.prisma.repository.updateMany({
         where: { name: repo, owner, userId },
-        data: { isActive: false }
+        data: { isActive: false },
       });
       return { success: true };
     } catch (error) {
@@ -130,23 +144,28 @@ export class WebhooksService {
     if (!pr || !repo) return;
 
     // Handle PR closed event to stop active reviews
-    if (event === 'closed') {
-      this.logger.log(`PR closed for ${repo.full_name} PR #${pr.number}. Stopping any active analysis.`);
-      
+    if (event === "closed") {
+      this.logger.log(
+        `PR closed for ${repo.full_name} PR #${pr.number}. Stopping any active analysis.`,
+      );
+
       const updated = await this.prisma.analysis.updateMany({
         where: {
           repoName: repo.name,
           prNumber: pr.number,
-          status: { in: ['pending', 'in_progress'] }
+          status: { in: ["pending", "in_progress"] },
         },
         data: {
-          status: 'stopped',
-          summary: 'The AI analysis has been stopped because the pull request has been closed.'
-        }
+          status: "stopped",
+          summary:
+            "The AI analysis has been stopped because the pull request has been closed.",
+        },
       });
-      
-      this.logger.log(`Stopped ${updated.count} active analyses for PR #${pr.number}`);
-      
+
+      this.logger.log(
+        `Stopped ${updated.count} active analyses for PR #${pr.number}`,
+      );
+
       // Update GitHub commit status to indicate the analysis was stopped
       try {
         const repoRecord = await this.prisma.repository.findFirst({
@@ -159,37 +178,43 @@ export class WebhooksService {
             repo.owner.login,
             repo.name,
             pr.head.sha,
-            'failure',
-            'AI Analysis stopped - Pull request closed.',
+            "failure",
+            "AI Analysis stopped - Pull request closed.",
           );
         }
       } catch (err: any) {
-        this.logger.error(`Failed to update commit status on PR close: ${err.message}`);
+        this.logger.error(
+          `Failed to update commit status on PR close: ${err.message}`,
+        );
       }
-      
-      return { status: 'stopped' };
+
+      return { status: "stopped" };
     }
 
     // We only care about opened, synchronized, or reopened PRs for reviews
-    if (event !== 'opened' && event !== 'synchronize' && event !== 'reopened') {
+    if (event !== "opened" && event !== "synchronize" && event !== "reopened") {
       this.logger.log(`Ignoring PR event: ${event}`);
       return;
     }
 
-    this.logger.log(`Processing automatic review for ${repo.full_name} PR #${pr.number}`);
+    this.logger.log(
+      `Processing automatic review for ${repo.full_name} PR #${pr.number}`,
+    );
 
     // 1. Find the user who owns this repository connection
     const repoRecord = await this.prisma.repository.findFirst({
-      where: { 
+      where: {
         name: repo.name,
         owner: repo.owner.login,
-        isActive: true
+        isActive: true,
       },
-      include: { user: true }
+      include: { user: true },
     });
 
     if (!repoRecord) {
-      this.logger.warn(`No active repository record found for ${repo.full_name}`);
+      this.logger.warn(
+        `No active repository record found for ${repo.full_name}`,
+      );
       return;
     }
 
@@ -203,37 +228,54 @@ export class WebhooksService {
         repo.owner.login,
         repo.name,
         pr.head.sha,
-        'pending',
-        'AI Agents are starting code analysis... 10%',
+        "pending",
+        "AI Agents are starting code analysis... 10%",
       );
     } catch (err: any) {
-      this.logger.warn(`Failed to set initial commit status check: ${err.message}`);
+      this.logger.warn(
+        `Failed to set initial commit status check: ${err.message}`,
+      );
     }
 
     // Await the background analysis execution to prevent Vercel from freezing the serverless function
-    await this.processBackgroundAnalysis(repo, pr, repoRecord, githubToken, event, payload);
+    await this.processBackgroundAnalysis(
+      repo,
+      pr,
+      repoRecord,
+      githubToken,
+      event,
+      payload,
+    );
 
-    return { status: 'processing' };
-
+    return { status: "processing" };
   }
 
   /**
    * Run analysis in the background to avoid blocking webhooks
    */
-  private async processBackgroundAnalysis(repo: any, pr: any, repoRecord: any, githubToken: string, event: string, payload: any) {
+  private async processBackgroundAnalysis(
+    repo: any,
+    pr: any,
+    repoRecord: any,
+    githubToken: string,
+    event: string,
+    payload: any,
+  ) {
     try {
       const octokit = new Octokit({ auth: githubToken });
-      let diff = '';
+      let diff = "";
 
-      if (event === 'synchronize' && payload.before && payload.after) {
-        this.logger.log(`Fetching incremental diff between ${payload.before} and ${payload.after}`);
+      if (event === "synchronize" && payload.before && payload.after) {
+        this.logger.log(
+          `Fetching incremental diff between ${payload.before} and ${payload.after}`,
+        );
         const { data: comparison } = await octokit.rest.repos.compareCommits({
           owner: repo.owner.login,
           repo: repo.name,
           base: payload.before,
           head: payload.after,
           headers: {
-            accept: 'application/vnd.github.v3.diff',
+            accept: "application/vnd.github.v3.diff",
           },
         });
         diff = comparison as any;
@@ -243,7 +285,7 @@ export class WebhooksService {
           repo: repo.name,
           pull_number: pr.number,
           headers: {
-            accept: 'application/vnd.github.v3.diff',
+            accept: "application/vnd.github.v3.diff",
           },
         });
         diff = fullDiff as any;
@@ -262,7 +304,9 @@ export class WebhooksService {
         repoRecord.user.selectedModels || undefined,
       );
     } catch (error) {
-      this.logger.error(`Automatic analysis failed for ${repo.full_name} PR #${pr.number}: ${error.message}`);
+      this.logger.error(
+        `Automatic analysis failed for ${repo.full_name} PR #${pr.number}: ${error.message}`,
+      );
     }
   }
 
@@ -272,13 +316,13 @@ export class WebhooksService {
   private async getUserGithubToken(userId: string): Promise<string> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { githubToken: true }
+      select: { githubToken: true },
     });
-    
+
     if (!user?.githubToken) {
       throw new Error(`No GitHub token found for user ${userId}`);
     }
-    
+
     return user.githubToken;
   }
 }
