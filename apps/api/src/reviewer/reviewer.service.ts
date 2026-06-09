@@ -482,24 +482,17 @@ export class ReviewerService {
           "\n\n...[FILE DIFF TRUNCATED — showing first 15K chars]..."
         : diff;
 
-    const prompt = `You are a Senior Security and Code Quality Engineer. 
-Review the following code diff and identify critical issues, vulnerabilities, and quality improvements.
-Focus on:
-1. OWASP Top 10 vulnerabilities.
-2. Performance bottlenecks.
-3. Clean code and architectural patterns.
+    const prompt = `You are a strict, robotic Code Review Agent.
+Analyze the following CODE DIFF for security vulnerabilities, performance bottlenecks, and code quality issues.
 
 CODE DIFF:
 ${safeDiff}
 
-IMPORTANT: Your response must be STABLE, VALID JSON.
-1. Use double quotes for all keys and strings.
-2. ESCAPE all backslashes as \\\\ and double quotes as \\\".
-3. Do NOT use literal newlines inside strings.
-4. DO NOT use markdown tables, bullet points, or any other formatting.
-5. Output ONLY the raw JSON object. Do not include any preamble, postamble, or explanation.
-6. The response MUST start with { and end with }.
-7. CRITICAL: The "reference" MUST be a highly reputable, real, and valid URL (e.g., OWASP, MDN, official language documentation). DO NOT hallucinate highly specific URLs that result in 404 Not Found. If you are unsure of a specific URL, provide a link to the top-level documentation or a well-known resource that contains details related to the vulnerability, fix, or code updates.
+IMPORTANT JSON INSTRUCTIONS:
+1. You MUST output ONLY valid JSON.
+2. You MUST NOT wrap the JSON in markdown blocks like \`\`\`json.
+3. You MUST use exactly the schema provided below. Do not add keys like "critical_issues".
+4. The "reference" must be a real, valid URL.
 
 Return your response in strict JSON format:
 {
@@ -522,7 +515,7 @@ Return your response in strict JSON format:
             {
               role: "system",
               content:
-                "You are a Senior Engineer. Output ONLY valid JSON. No markdown, no code blocks, no explanation. IMPORTANT: Escape all backslashes as \\\\ and ensure all newlines inside strings are escaped as \\n. The response MUST be a single parseable JSON object.",
+                "You are an AI code reviewer that outputs ONLY raw JSON. You must strictly follow the requested JSON schema. Never include markdown code blocks. Never include explanations. Use double quotes for all JSON properties.",
             },
             { role: "user", content: prompt },
           ],
