@@ -191,11 +191,11 @@ export class WebhooksService {
       return { status: "stopped" };
     }
 
-    // We only care about opened, synchronized, or reopened PRs for reviews
-    if (event !== "opened" && event !== "synchronize" && event !== "reopened") {
-      this.logger.log(`Ignoring PR event: ${event}`);
-      return;
-    }
+    // The user requested to run AI analysis for EVERY pull request event.
+    // We log the specific event type for debugging purposes.
+    this.logger.log(
+      `Received PR event: ${event}. Proceeding with analysis as requested.`,
+    );
 
     this.logger.log(
       `Processing automatic review for ${repo.full_name} PR #${pr.number}`,
