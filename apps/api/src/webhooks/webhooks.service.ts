@@ -85,6 +85,41 @@ export class WebhooksService {
   }
 
   /**
+   * Unregister a webhook on a GitHub repository
+   */
+  async unregisterWebhook(userId: string, owner: string, repo: string, githubToken: string) {
+    const octokit = new Octokit({ auth: githubToken });
+    
+    try {
+      const repoRecord = await this.prisma.repository.findFirst({
+        where: { name: repo, owner, userId }
+      });
+      
+      if (repoRecord && repoRecord.webhookId) {
+        try {
+          await octokit.rest.repos.deleteWebhook({
+            owner,
+            repo,
+            hook_id: parseInt(repoRecord.webhookId)
+          });
+          this.logger.log(`Deleted webhook from GitHub for ${owner}/${repo}`);
+        } catch (e) {
+          this.logger.warn(`Could not delete webhook on github: ${e.message}`);
+        }
+      }
+      
+      await this.prisma.repository.updateMany({
+        where: { name: repo, owner, userId },
+        data: { isActive: false }
+      });
+      return { success: true };
+    } catch (error) {
+      this.logger.error(`Failed to unregister webhook: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
    * Handle incoming GitHub webhooks
    */
   async handleGithubWebhook(payload: any) {
