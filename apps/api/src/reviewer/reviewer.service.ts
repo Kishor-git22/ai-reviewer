@@ -99,7 +99,7 @@ export class ReviewerService {
     return new OpenAI({
       baseURL: "https://integrate.api.nvidia.com/v1",
       apiKey,
-      timeout: 120000, // 2 minutes (per-file chunks are small)
+      timeout: 300000, // 5 minutes safety net for larger file chunks
     });
   }
 
@@ -474,12 +474,12 @@ export class ReviewerService {
       `AI Request: model=${model} key=${apiKey.substring(0, 10)}... URL=https://integrate.api.nvidia.com/v1`,
     );
 
-    // Truncate diff to prevent exceeding the model's context window (max ~130k tokens)
-    const MAX_CHARS = 200000;
+    // Truncate per-file chunk to keep prompts small and fast
+    const MAX_CHUNK_CHARS = 15000;
     const safeDiff =
-      diff.length > MAX_CHARS
-        ? diff.substring(0, MAX_CHARS) +
-          "\n\n...[DIFF TRUNCATED DUE TO LENGTH]..."
+      diff.length > MAX_CHUNK_CHARS
+        ? diff.substring(0, MAX_CHUNK_CHARS) +
+          "\n\n...[FILE DIFF TRUNCATED — showing first 15K chars]..."
         : diff;
 
     const prompt = `You are a Senior Security and Code Quality Engineer. 
