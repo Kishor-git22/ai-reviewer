@@ -104,10 +104,21 @@ function PRListItem({
         <div
           className={cn(
             'flex h-12 w-12 items-center justify-center rounded-2xl transition-transform group-hover:scale-110',
-            pr.vuls > 0 ? 'bg-red-500/10 text-red-400' : 'bg-green-500/10 text-green-400'
+            (pr.status === 'in_progress' || pr.status === 'pending') ? 'bg-blue-500/10 text-blue-400' :
+            (pr.status === 'stopped' || pr.status === 'failed' || pr.vuls > 0) ? 'bg-red-500/10 text-red-400' :
+            (pr.status === 'unreviewed') ? 'bg-muted/10 text-muted-foreground' :
+            'bg-green-500/10 text-green-400'
           )}
         >
-          {pr.vuls > 0 ? <AlertCircle size={22} /> : <CheckCircle2 size={22} />}
+          {(pr.status === 'in_progress' || pr.status === 'pending') ? (
+            <Loader2 className="animate-spin" size={22} />
+          ) : (pr.status === 'stopped' || pr.status === 'failed' || pr.vuls > 0) ? (
+            <AlertCircle size={22} />
+          ) : (pr.status === 'unreviewed') ? (
+            <GitPullRequest size={22} />
+          ) : (
+            <CheckCircle2 size={22} />
+          )}
         </div>
         <div>
           <div className="flex items-center gap-2">
@@ -121,8 +132,12 @@ function PRListItem({
               <div className="h-1.5 w-1.5 rounded-full bg-blue-500" />
               {(pr as any).user}
             </span>
-            <span>•</span>
-            <span>Score: {pr.quality}%</span>
+            {pr.quality !== null && (
+              <>
+                <span>•</span>
+                <span>Score: {pr.quality}%</span>
+              </>
+            )}
             <span>•</span>
             <span>{new Date((pr as any).createdAt).toLocaleDateString()}</span>
           </div>
@@ -379,44 +394,18 @@ export default function DashboardPage() {
             </div>
           )
         ) : selectedPr && showModelSelection ? (
-          <div className="mx-auto max-w-5xl space-y-12">
-            <div className="space-y-6">
-              <div className="text-center">
-                <h3 className="text-2xl font-black text-foreground">AI Analysis Not Done</h3>
-                <p className="text-muted-foreground mt-2">
-                  AI Analysis is not done for this pull request. You can manually launch a review below.
-                </p>
-              </div>
-              
-              <div className="flex justify-center gap-4">
-                {selectedModels.map((modelId: string) => {
-                  const modelInfo = NVIDIA_MODELS.find(m => m.id === modelId);
-                  return (
-                    <div key={modelId} className="flex flex-col items-center p-4 bg-card/50 border border-border/50 rounded-2xl w-48 text-center">
-                      <Cpu className="h-8 w-8 text-primary mb-2" />
-                      <span className="font-bold text-sm text-foreground">{modelInfo?.name || modelId}</span>
-                      <span className="text-xs text-muted-foreground mt-1 capitalize">{modelInfo?.capability || 'AI Agent'}</span>
-                    </div>
-                  )
-                })}
+          <div className="flex h-full flex-col items-center justify-center space-y-8 py-20">
+            <div className="relative">
+              <div className="absolute -inset-4 rounded-full bg-muted/20 blur-xl" />
+              <div className="relative flex h-24 w-24 items-center justify-center rounded-3xl bg-card border-2 border-muted shadow-lg">
+                <Cpu className="h-12 w-12 text-muted-foreground" />
               </div>
             </div>
-            <div className="flex justify-end pt-6">
-              <Button
-                size="lg"
-                disabled={selectedModels.length !== 3 || analyzeMutation.isPending}
-                onClick={handleStartAnalysis}
-                className="gap-2 rounded-[2rem] px-10 h-16 text-lg font-black shadow-2xl shadow-primary/30 transition-all hover:scale-105 active:scale-95"
-              >
-                {analyzeMutation.isPending ? (
-                  <Loader2 className="h-6 w-6 animate-spin" />
-                ) : (
-                  <>
-                    Launch Analysis
-                    <ArrowRight className="h-6 w-6" />
-                  </>
-                )}
-              </Button>
+            <div className="max-w-md text-center space-y-3">
+              <h2 className="text-2xl font-black text-foreground">No AI Analysis Found</h2>
+              <p className="text-sm font-bold text-muted-foreground">
+                AI Analysis is not done for this pull request.
+              </p>
             </div>
           </div>
         ) : (
