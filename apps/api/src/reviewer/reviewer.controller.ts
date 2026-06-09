@@ -231,7 +231,30 @@ export class ReviewerController {
       },
     });
   }
+  @UseGuards(JwtAuthGuard)
+  @Get('repo/:repoName/prs/status')
+  async getRepoPrsStatus(
+    @Param('repoName') repoName: string,
+  ) {
+    const analyses = await this.prisma.analysis.findMany({
+      where: { repoName },
+      orderBy: { createdAt: 'desc' },
+      include: { findings: true },
+    });
 
+    const latestByPr = {};
+    for (const analysis of analyses) {
+      if (!latestByPr[analysis.prNumber]) {
+        latestByPr[analysis.prNumber] = {
+          status: analysis.status,
+          qualityScore: analysis.qualityScore,
+          vuls: analysis.findings.filter(f => f.type === 'Vulnerability' || f.type === 'Critical').length,
+          recs: analysis.findings.length,
+        };
+      }
+    }
+    return latestByPr;
+  }
   @Get('history')
   async getHistory(@Request() req) {
     return this.prisma.analysis.findMany({
