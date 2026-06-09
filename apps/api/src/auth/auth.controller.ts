@@ -1,11 +1,11 @@
-import { Controller, Post, Get, Body, UseGuards } from '@nestjs/common'
-import { AuthService } from './auth.service'
-import { GitHubSyncDto } from './dto/github-sync.dto'
-import { JwtAuthGuard } from './guards/jwt-auth.guard'
-import { GetUser } from './decorators/get-user.decorator'
-import { User } from '@prisma/client'
+import { Controller, Post, Get, Body, UseGuards } from "@nestjs/common";
+import { AuthService } from "./auth.service";
+import { GitHubSyncDto } from "./dto/github-sync.dto";
+import { JwtAuthGuard } from "./guards/jwt-auth.guard";
+import { GetUser } from "./decorators/get-user.decorator";
+import { User } from "@prisma/client";
 
-@Controller('auth')
+@Controller("auth")
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
@@ -14,11 +14,11 @@ export class AuthController {
    * Accepts GitHub access token from frontend, syncs user with database,
    * and returns a backend JWT token
    */
-  @Post('github/sync')
+  @Post("github/sync")
   async syncGitHubUser(@Body() dto: GitHubSyncDto) {
     const { user, accessToken } = await this.authService.syncGitHubUser(
-      dto.accessToken
-    )
+      dto.accessToken,
+    );
 
     return {
       success: true,
@@ -34,7 +34,7 @@ export class AuthController {
         },
         accessToken,
       },
-    }
+    };
   }
 
   /**
@@ -42,7 +42,7 @@ export class AuthController {
    * Protected route that returns the current user's profile
    * Requires valid JWT token in Authorization header
    */
-  @Get('profile')
+  @Get("profile")
   @UseGuards(JwtAuthGuard)
   async getProfile(@GetUser() user: User) {
     return {
@@ -58,6 +58,6 @@ export class AuthController {
           updatedAt: user.updatedAt,
         },
       },
-    }
+    };
   }
 }

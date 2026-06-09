@@ -1,16 +1,16 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { PrismaService } from '../prisma/prisma.service';
-import OpenAI from 'openai';
-import { GithubService } from './github.service';
+import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { PrismaService } from "../prisma/prisma.service";
+import OpenAI from "openai";
+import { GithubService } from "./github.service";
 
 export interface AIReviewResult {
   findings: Array<{
     file: string;
     line: number;
     issue: string;
-    type: 'Critical' | 'Vulnerability' | 'Warning' | 'Info';
-    confidence: 'High' | 'Medium' | 'Low';
+    type: "Critical" | "Vulnerability" | "Warning" | "Info";
+    confidence: "High" | "Medium" | "Low";
     rationale: string;
     resolution: string;
     reference: string;
@@ -23,40 +23,44 @@ export interface AIReviewResult {
 @Injectable()
 export class ReviewerService {
   private readonly logger = new Logger(ReviewerService.name);
-  
+
   /**
    * Helper to get the API key for a specific model from environment
    */
   private getModelKey(modelId: string): string {
     const envMap: Record<string, string> = {
-      'deepseek-v4-flash': 'DEEPSEEK_FLASH_KEY',
-      'deepseek-v4-pro': 'DEEPSEEK_PRO_KEY',
-      'mistral-medium-3.5': 'MISTRAL_MEDIUM_KEY',
-      'mistral-small-4': 'MISTRAL_SMALL_KEY',
-      'minimax-m2.7': 'MINIMAX_KEY',
-      'nemotron-3-super': 'NEMOTRON_SUPER_KEY',
-      'llama-3.1': 'LLAMA_31_KEY',
-      'gemma-2-27b': 'GEMMA_3_KEY',
-      'gemma-3': 'GEMMA_3_KEY', // Alias for backward compatibility
-      'phi-4': 'PHI_4_KEY',
+      "deepseek-v4-flash": "DEEPSEEK_FLASH_KEY",
+      "deepseek-v4-pro": "DEEPSEEK_PRO_KEY",
+      "mistral-medium-3.5": "MISTRAL_MEDIUM_KEY",
+      "mistral-small-4": "MISTRAL_SMALL_KEY",
+      "minimax-m2.7": "MINIMAX_KEY",
+      "nemotron-3-super": "NEMOTRON_SUPER_KEY",
+      "llama-3.1": "LLAMA_31_KEY",
+      "gemma-2-27b": "GEMMA_3_KEY",
+      "gemma-3": "GEMMA_3_KEY", // Alias for backward compatibility
+      "phi-4": "PHI_4_KEY",
     };
 
     const envVar = envMap[modelId];
-    return this.configService.get<string>(envVar) || this.configService.get<string>('NVIDIA_API_KEY') || '';
+    return (
+      this.configService.get<string>(envVar) ||
+      this.configService.get<string>("NVIDIA_API_KEY") ||
+      ""
+    );
   }
 
   // Actual NVIDIA NIM model IDs for mapping
   private readonly MODEL_MAPPING: Record<string, string> = {
-    'deepseek-v4-flash': 'deepseek-ai/deepseek-v4-flash',
-    'deepseek-v4-pro': 'deepseek-ai/deepseek-v4-pro',
-    'mistral-medium-3.5': 'mistralai/mistral-medium-3.5-128b',
-    'mistral-small-4': 'mistralai/mistral-small-4-119b-2603',
-    'minimax-m2.7': 'minimaxai/minimax-m2.7',
-    'nemotron-3-super': 'nvidia/nemotron-3-super-120b-a12b',
-    'llama-3.1': 'meta/llama-3.1-70b-instruct',
-    'gemma-2-27b': 'meta/llama-3.3-70b-instruct',
-    'gemma-3': 'meta/llama-3.3-70b-instruct', // Alias
-    'phi-4': 'microsoft/phi-4-mini-instruct',
+    "deepseek-v4-flash": "deepseek-ai/deepseek-v4-flash",
+    "deepseek-v4-pro": "deepseek-ai/deepseek-v4-pro",
+    "mistral-medium-3.5": "mistralai/mistral-medium-3.5-128b",
+    "mistral-small-4": "mistralai/mistral-small-4-119b-2603",
+    "minimax-m2.7": "minimaxai/minimax-m2.7",
+    "nemotron-3-super": "nvidia/nemotron-3-super-120b-a12b",
+    "llama-3.1": "meta/llama-3.1-70b-instruct",
+    "gemma-2-27b": "meta/llama-3.3-70b-instruct",
+    "gemma-3": "meta/llama-3.3-70b-instruct", // Alias
+    "phi-4": "microsoft/phi-4-mini-instruct",
   };
 
   constructor(
@@ -71,7 +75,7 @@ export class ReviewerService {
   private getClient(modelId: string): OpenAI {
     const apiKey = this.getModelKey(modelId);
     return new OpenAI({
-      baseURL: 'https://integrate.api.nvidia.com/v1',
+      baseURL: "https://integrate.api.nvidia.com/v1",
       apiKey,
       timeout: 900000, // 15 minutes
     });
@@ -90,9 +94,9 @@ export class ReviewerService {
     owner: string,
     headSha: string,
     selectedModels: string[] = [
-      'llama-3.1',
-      'deepseek-v4-flash',
-      'mistral-small-4',
+      "llama-3.1",
+      "deepseek-v4-flash",
+      "mistral-small-4",
     ],
   ) {
     // 0. Check if an analysis is already in progress for this PR
@@ -100,26 +104,33 @@ export class ReviewerService {
       where: {
         repoName,
         prNumber,
-        status: 'in_progress',
+        status: "in_progress",
       },
     });
 
     if (existingAnalysis) {
-      this.logger.log(`Analysis for ${repoName} PR #${prNumber} already in progress. Mark as cancelled and starting fresh.`);
+      this.logger.log(
+        `Analysis for ${repoName} PR #${prNumber} already in progress. Mark as cancelled and starting fresh.`,
+      );
       await this.prisma.analysis.update({
         where: { id: existingAnalysis.id },
-        data: { status: 'failed' }
+        data: { status: "failed" },
       });
     }
 
-    this.logger.log(`Starting debate review for ${repoName} PR #${prNumber} with models: ${selectedModels.join(', ')}`);
+    this.logger.log(
+      `Starting debate review for ${repoName} PR #${prNumber} with models: ${selectedModels.join(", ")}`,
+    );
     this.logger.log(`Diff size: ${diff.length} characters`);
 
     // Truncate diff if it's too large to prevent 504 timeouts
     let processedDiff = diff;
     if (diff.length > 40000) {
-      this.logger.warn(`Diff too large (${diff.length} chars). Truncating to 40,000 chars.`);
-      processedDiff = diff.substring(0, 40000) + '\n\n... [Diff truncated due to size] ...';
+      this.logger.warn(
+        `Diff too large (${diff.length} chars). Truncating to 40,000 chars.`,
+      );
+      processedDiff =
+        diff.substring(0, 40000) + "\n\n... [Diff truncated due to size] ...";
     }
 
     // 1. Create initial analysis record
@@ -129,7 +140,7 @@ export class ReviewerService {
         repoName,
         prNumber,
         title,
-        status: 'in_progress',
+        status: "in_progress",
         models: selectedModels,
       },
     });
@@ -141,8 +152,8 @@ export class ReviewerService {
         owner,
         repoName,
         headSha,
-        'pending',
-        'AI Agents are analyzing the code... 15%',
+        "pending",
+        "AI Agents are analyzing the code... 15%",
       );
 
       // 2. Run analysis across 3 agents with independent error handling
@@ -150,20 +161,22 @@ export class ReviewerService {
         selectedModels.map(async (model) => {
           try {
             const response = await this.getAgentReview(model, processedDiff);
-            return { model, status: 'success', response };
+            return { model, status: "success", response };
           } catch (e: any) {
             this.logger.error(`Agent review for ${model} failed: ${e.message}`);
-            return { model, status: 'failed', error: e.message };
+            return { model, status: "failed", error: e.message };
           }
-        })
+        }),
       );
 
       const successfulResponses = agentResults
-        .filter(r => r.status === 'success')
-        .map(r => r.response);
+        .filter((r) => r.status === "success")
+        .map((r) => r.response);
 
       if (successfulResponses.length === 0) {
-        throw new Error('All AI agents failed to respond. Please check your API keys or try again later.');
+        throw new Error(
+          "All AI agents failed to respond. Please check your API keys or try again later.",
+        );
       }
 
       // Check if stopped before starting synthesis
@@ -171,8 +184,10 @@ export class ReviewerService {
         where: { id: analysis.id },
         select: { status: true },
       });
-      if (checkAnalysis?.status === 'stopped') {
-        this.logger.log(`Analysis ${analysis.id} was stopped. Aborting debate review.`);
+      if (checkAnalysis?.status === "stopped") {
+        this.logger.log(
+          `Analysis ${analysis.id} was stopped. Aborting debate review.`,
+        );
         return analysis.id;
       }
 
@@ -181,35 +196,41 @@ export class ReviewerService {
         owner,
         repoName,
         headSha,
-        'pending',
+        "pending",
         `Agents are debating consensus (${successfulResponses.length}/3)... 65%`,
       );
 
       // 3. Perform Consensus synthesis (Agent Debate) with fallback lead models
       let synthesis: AIReviewResult | null = null;
-      let lastSynthesisError: Error | null = null;
-      
+
       // Filter models that successfully provided initial reviews
       const candidateLeads = agentResults
-        .filter(r => r.status === 'success')
-        .map(r => r.model);
+        .filter((r) => r.status === "success")
+        .map((r) => r.model);
 
       for (const leadModel of candidateLeads) {
         try {
-          this.logger.log(`Attempting consensus synthesis with lead model: ${leadModel}`);
-          synthesis = await this.synthesizeConsensus(leadModel, successfulResponses, processedDiff);
+          this.logger.log(
+            `Attempting consensus synthesis with lead model: ${leadModel}`,
+          );
+          synthesis = await this.synthesizeConsensus(
+            leadModel,
+            successfulResponses,
+            processedDiff,
+          );
           if (synthesis) break;
         } catch (e: any) {
-          this.logger.warn(`Synthesis with lead ${leadModel} failed: ${e.message}. Trying next candidate...`);
-          lastSynthesisError = e;
+          this.logger.warn(
+            `Synthesis with lead ${leadModel} failed: ${e.message}. Trying next candidate...`,
+          );
         }
       }
 
       if (!synthesis) {
-        this.logger.error('All candidate lead models failed synthesis debate.');
+        this.logger.error("All candidate lead models failed synthesis debate.");
         // Fallback: Naive synthesis (just merge all unique findings)
         synthesis = this.naiveSynthesis(successfulResponses);
-        this.logger.warn('Proceeding with Naive Synthesis fallback.');
+        this.logger.warn("Proceeding with Naive Synthesis fallback.");
       }
 
       // Check if stopped before updating database
@@ -217,8 +238,10 @@ export class ReviewerService {
         where: { id: analysis.id },
         select: { status: true },
       });
-      if (checkAnalysis?.status === 'stopped') {
-        this.logger.log(`Analysis ${analysis.id} was stopped. Aborting final updates.`);
+      if (checkAnalysis?.status === "stopped") {
+        this.logger.log(
+          `Analysis ${analysis.id} was stopped. Aborting final updates.`,
+        );
         return analysis.id;
       }
 
@@ -227,17 +250,17 @@ export class ReviewerService {
         owner,
         repoName,
         headSha,
-        'pending',
-        'Finalizing the review report... 90%',
+        "pending",
+        "Finalizing the review report... 90%",
       );
 
       // Filter out findings that don't have at least 2 agents agreeing
-      synthesis.findings = synthesis.findings.filter(finding => {
+      synthesis.findings = synthesis.findings.filter((finding) => {
         let positiveCount = 0;
-        agentResults.forEach(agent => {
-          if (agent.status === 'success' && agent.response?.content?.findings) {
+        agentResults.forEach((agent) => {
+          if (agent.status === "success" && agent.response?.content?.findings) {
             const match = agent.response.content.findings.find(
-              (f: any) => f.file === finding.file && f.line === finding.line
+              (f: any) => f.file === finding.file && f.line === finding.line,
             );
             if (match) positiveCount++;
           }
@@ -263,28 +286,34 @@ export class ReviewerService {
       });
 
       await this.prisma.analysis.update({
-          where: { id: analysis.id },
-          data: {
-            status: 'completed',
-            qualityScore: synthesis.qualityScore,
-            securityScore: synthesis.securityScore,
-            summary: synthesis.summary,
-            debateLog: { agents: agentResults } as any,
-          },
-        });
+        where: { id: analysis.id },
+        data: {
+          status: "completed",
+          qualityScore: synthesis.qualityScore,
+          securityScore: synthesis.securityScore,
+          summary: synthesis.summary,
+          debateLog: { agents: agentResults } as any,
+        },
+      });
 
       // 5. Extract valid paths from diff to prevent GitHub 422 errors
       const validPaths = new Set(
-        Array.from(processedDiff.matchAll(/^(?:\+\+\+|---) [ab]\/(.*?)(?:[ \t].*)?$/gm))
+        Array.from(
+          processedDiff.matchAll(/^(?:\+\+\+|---) [ab]\/([^ \t\r\n]+)/gm),
+        )
           .map((m) => m[1])
-          .filter(Boolean)
+          .filter(Boolean),
       );
 
       // Filter findings to only those that apply to valid paths in the diff
-      const validFindings = createdFindings.filter((f) => validPaths.has(f.file));
+      const validFindings = createdFindings.filter((f) =>
+        validPaths.has(f.file),
+      );
 
       if (validFindings.length > 0) {
-        this.logger.log(`Posting ${validFindings.length} valid inline review comments...`);
+        this.logger.log(
+          `Posting ${validFindings.length} valid inline review comments...`,
+        );
         const commentIds = await this.githubService.postComments(
           githubToken,
           owner,
@@ -297,11 +326,13 @@ export class ReviewerService {
         for (const [findingId, commentId] of Object.entries(commentIds)) {
           await this.prisma.finding.update({
             where: { id: findingId },
-            data: { githubCommentId: commentId }
+            data: { githubCommentId: commentId },
           });
         }
       } else {
-        this.logger.log('No inline findings match the PR diff files. Posting summary only.');
+        this.logger.log(
+          "No inline findings match the PR diff files. Posting summary only.",
+        );
         await this.githubService.postSummaryOnly(
           githubToken,
           owner,
@@ -314,7 +345,13 @@ export class ReviewerService {
       }
 
       // 6. Cross-commit comparison for resolved issues
-      await this.resolveOldFindings(owner, repoName, prNumber, createdFindings, githubToken);
+      await this.resolveOldFindings(
+        owner,
+        repoName,
+        prNumber,
+        createdFindings,
+        githubToken,
+      );
 
       // 7. Update Status to Success
       await this.githubService.updateCommitStatus(
@@ -322,27 +359,33 @@ export class ReviewerService {
         owner,
         repoName,
         headSha,
-        'success',
+        "success",
         `Analysis complete: found ${validFindings.length} issues.`,
       );
 
       return analysis.id;
     } catch (error) {
-      this.logger.error(`Analysis failed for PR #${prNumber}: ${error.message}`);
-      
-      const checkAnalysis = await this.prisma.analysis.findUnique({
-        where: { id: analysis.id },
-        select: { status: true },
-      }).catch(() => null);
+      this.logger.error(
+        `Analysis failed for PR #${prNumber}: ${error.message}`,
+      );
 
-      if (checkAnalysis?.status === 'stopped') {
-        this.logger.log(`Analysis ${analysis.id} was stopped. Ignoring failure status update.`);
+      const checkAnalysis = await this.prisma.analysis
+        .findUnique({
+          where: { id: analysis.id },
+          select: { status: true },
+        })
+        .catch(() => null);
+
+      if (checkAnalysis?.status === "stopped") {
+        this.logger.log(
+          `Analysis ${analysis.id} was stopped. Ignoring failure status update.`,
+        );
         return analysis.id;
       }
 
       await this.prisma.analysis.update({
         where: { id: analysis.id },
-        data: { status: 'failed' },
+        data: { status: "failed" },
       });
 
       // Update GitHub with error status
@@ -351,7 +394,7 @@ export class ReviewerService {
         owner,
         repoName,
         headSha,
-        'error',
+        "error",
         `Analysis failed: ${error.message.substring(0, 50)}...`,
       );
 
@@ -363,14 +406,18 @@ export class ReviewerService {
     const client = this.getClient(modelId);
     const model = this.MODEL_MAPPING[modelId] || modelId;
     const apiKey = this.getModelKey(modelId);
-    
-    this.logger.debug(`AI Request: model=${model} key=${apiKey.substring(0, 10)}... URL=https://integrate.api.nvidia.com/v1`);
+
+    this.logger.debug(
+      `AI Request: model=${model} key=${apiKey.substring(0, 10)}... URL=https://integrate.api.nvidia.com/v1`,
+    );
 
     // Truncate diff to prevent exceeding the model's context window (max ~130k tokens)
     const MAX_CHARS = 200000;
-    const safeDiff = diff.length > MAX_CHARS 
-      ? diff.substring(0, MAX_CHARS) + '\n\n...[DIFF TRUNCATED DUE TO LENGTH]...'
-      : diff;
+    const safeDiff =
+      diff.length > MAX_CHARS
+        ? diff.substring(0, MAX_CHARS) +
+          "\n\n...[DIFF TRUNCATED DUE TO LENGTH]..."
+        : diff;
 
     const prompt = `You are a Senior Security and Code Quality Engineer. 
 Review the following code diff and identify critical issues, vulnerabilities, and quality improvements.
@@ -403,36 +450,43 @@ Return your response in strict JSON format:
 
     let completion;
     let retries = 2;
-    
+
     while (retries >= 0) {
       try {
         completion = await client.chat.completions.create({
           model,
           messages: [
-            { role: 'system', content: 'You are a Senior Engineer. Output ONLY valid JSON. No markdown, no code blocks, no explanation. IMPORTANT: Escape all backslashes as \\\\ and ensure all newlines inside strings are escaped as \\n. The response MUST be a single parseable JSON object.' },
-            { role: 'user', content: prompt }
+            {
+              role: "system",
+              content:
+                "You are a Senior Engineer. Output ONLY valid JSON. No markdown, no code blocks, no explanation. IMPORTANT: Escape all backslashes as \\\\ and ensure all newlines inside strings are escaped as \\n. The response MUST be a single parseable JSON object.",
+            },
+            { role: "user", content: prompt },
           ],
           max_tokens: 3000,
           temperature: 0.1,
         });
         break;
       } catch (error: any) {
-        const isConnectionError = error.message?.toLowerCase().includes('connection') || 
-                                 error.message?.toLowerCase().includes('timeout') ||
-                                 error.status === 504 ||
-                                 error.status === 502;
-        
+        const isConnectionError =
+          error.message?.toLowerCase().includes("connection") ||
+          error.message?.toLowerCase().includes("timeout") ||
+          error.status === 504 ||
+          error.status === 502;
+
         if (isConnectionError && retries > 0) {
-          this.logger.warn(`Agent review for ${modelId} failed (${error.message}), retrying... (${retries} left)`);
+          this.logger.warn(
+            `Agent review for ${modelId} failed (${error.message}), retrying... (${retries} left)`,
+          );
           retries--;
-          await new Promise(resolve => setTimeout(resolve, 5000));
+          await new Promise((resolve) => setTimeout(resolve, 5000));
           continue;
         }
         throw error;
       }
     }
 
-    const content = completion.choices[0].message.content || '{}';
+    const content = completion.choices[0].message.content || "{}";
     const cleanContent = this.extractJsonBlock(content);
 
     return {
@@ -441,14 +495,20 @@ Return your response in strict JSON format:
     };
   }
 
-  private async synthesizeConsensus(modelId: string, agentResponses: any[], diff: string): Promise<AIReviewResult> {
+  private async synthesizeConsensus(
+    modelId: string,
+    agentResponses: any[],
+    diff: string,
+  ): Promise<AIReviewResult> {
     const client = this.getClient(modelId);
     const model = this.MODEL_MAPPING[modelId] || modelId;
 
     const MAX_CHARS = 200000;
-    const safeDiff = diff.length > MAX_CHARS 
-      ? diff.substring(0, MAX_CHARS) + '\n\n...[DIFF TRUNCATED DUE TO LENGTH]...'
-      : diff;
+    const safeDiff =
+      diff.length > MAX_CHARS
+        ? diff.substring(0, MAX_CHARS) +
+          "\n\n...[DIFF TRUNCATED DUE TO LENGTH]..."
+        : diff;
 
     const prompt = `You are the Lead Consensus Architect. 
 You have 3 independent AI agent reviews of a code change. 
@@ -482,36 +542,43 @@ Return your response in strict JSON format:
 
     let completion;
     let retries = 2;
-    
+
     while (retries >= 0) {
       try {
         completion = await client.chat.completions.create({
           model,
           messages: [
-            { role: 'system', content: 'You are a Lead Architect. Synthesize agent findings into a single JSON object. Be extremely concise. No preamble. No postamble.' },
-            { role: 'user', content: prompt }
+            {
+              role: "system",
+              content:
+                "You are a Lead Architect. Synthesize agent findings into a single JSON object. Be extremely concise. No preamble. No postamble.",
+            },
+            { role: "user", content: prompt },
           ],
           max_tokens: 3000,
           temperature: 0.1,
         });
         break;
       } catch (error: any) {
-        const isConnectionError = error.message?.toLowerCase().includes('connection') || 
-                                 error.message?.toLowerCase().includes('timeout') ||
-                                 error.status === 504 ||
-                                 error.status === 502;
-                                 
+        const isConnectionError =
+          error.message?.toLowerCase().includes("connection") ||
+          error.message?.toLowerCase().includes("timeout") ||
+          error.status === 504 ||
+          error.status === 502;
+
         if (isConnectionError && retries > 0) {
-          this.logger.warn(`Synthesis for ${modelId} failed (${error.message}), retrying... (${retries} left)`);
+          this.logger.warn(
+            `Synthesis for ${modelId} failed (${error.message}), retrying... (${retries} left)`,
+          );
           retries--;
-          await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5s
+          await new Promise((resolve) => setTimeout(resolve, 5000)); // Wait 5s
           continue;
         }
         throw error;
       }
     }
 
-    const content = completion.choices[0].message.content || '{}';
+    const content = completion.choices[0].message.content || "{}";
     const cleanContent = this.extractJsonBlock(content);
 
     return this.safeJsonParse(cleanContent);
@@ -530,13 +597,13 @@ Return your response in strict JSON format:
     // 2. Otherwise look for the block that contains our expected keys
     const markerRegex = /["']?(findings|qualityScore|summary)["']?\s*:/;
     const match = content.match(markerRegex);
-    
+
     if (match && match.index !== undefined) {
       // Find the { that starts the object containing this marker
-      const potentialStart = content.lastIndexOf('{', match.index);
+      const potentialStart = content.lastIndexOf("{", match.index);
       if (potentialStart !== -1) {
         // Find the matching } by looking for the last one in the file
-        const lastEnd = content.lastIndexOf('}');
+        const lastEnd = content.lastIndexOf("}");
         if (lastEnd > potentialStart) {
           return content.substring(potentialStart, lastEnd + 1);
         }
@@ -544,8 +611,8 @@ Return your response in strict JSON format:
     }
 
     // Fallback: Just try to find the largest block between { and }
-    const firstStart = content.indexOf('{');
-    const lastEnd = content.lastIndexOf('}');
+    const firstStart = content.indexOf("{");
+    const lastEnd = content.lastIndexOf("}");
     if (firstStart !== -1 && lastEnd !== -1 && lastEnd > firstStart) {
       return content.substring(firstStart, lastEnd + 1);
     }
@@ -559,28 +626,33 @@ Return your response in strict JSON format:
   private safeJsonParse(content: string): any {
     try {
       return JSON.parse(content);
-    } catch (e) {
+    } catch {
       this.logger.warn(`JSON parse failed, attempting recovery...`);
-      this.logger.debug(`Malformed JSON snippet: ${content.substring(0, 100)}...`);
-      
+      this.logger.debug(
+        `Malformed JSON snippet: ${content.substring(0, 100)}...`,
+      );
+
       let fixed = content.trim();
-      
+
       // 1. Remove non-printable control characters
       fixed = fixed.replace(/[\x00-\x1F\x7F-\x9F]/g, (char) => {
-        if (char === '\n' || char === '\r' || char === '\t') return char;
-        return '';
+        if (char === "\n" || char === "\r" || char === "\t") return char;
+        return "";
       });
 
       // 2. Remove markdown code blocks
-      fixed = fixed.replace(/^```json\s*/, '').replace(/```$/, '');
+      fixed = fixed.replace(/^```json\s*/, "").replace(/```$/, "");
 
       // 3. Fix unescaped quotes inside string values
       // This looks for "key": "value "with" quotes"
       // We look for quotes that are NOT followed by , } ] or : and are NOT preceded by \
-      fixed = fixed.replace(/:(?:\s*)"(.*?)",?(\s*[}\]])/gs, (match, p1, p2) => {
-        const sanitized = p1.replace(/(?<!\\)"/g, '\\"');
-        return `: "${sanitized}"${p2}`;
-      });
+      fixed = fixed.replace(
+        /:(?:\s*)"(.*?)",?(\s*[}\]])/gs,
+        (match, p1, p2) => {
+          const sanitized = p1.replace(/(?<!\\)"/g, '\\"');
+          return `: "${sanitized}"${p2}`;
+        },
+      );
 
       // 4. Handle unquoted or single-quoted keys/values
       fixed = fixed.replace(/'([^']+)':/g, '"$1":');
@@ -588,27 +660,30 @@ Return your response in strict JSON format:
       fixed = fixed.replace(/([{,]\s*)([a-zA-Z0-9_]+)\s*:/g, '$1"$2":');
 
       // 5. Fix common backslash errors
-      fixed = fixed.replace(/\\(?![nr"t\\\/])/g, '\\\\');
+      fixed = fixed.replace(/\\(?![nr"t\\\/])/g, "\\\\");
 
       // 6. Handle literal newlines
       fixed = fixed.replace(/(".*?")/gs, (match) => {
-        return match.replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+        return match.replace(/\n/g, "\\n").replace(/\r/g, "\\r");
       });
 
       // 7. Clean up commas
       // 7. Clean up commas
-      fixed = fixed.replace(/,(\s*[\]}])/g, '$1');
-      fixed = fixed.replace(/\}\s*\{/g, '},{');
-      fixed = fixed.replace(/\]\s*\{/g, '],{');
-      fixed = fixed.replace(/"\s*"/g, '","'); 
+      fixed = fixed.replace(/,(\s*[\]}])/g, "$1");
+      fixed = fixed.replace(/\}\s*\{/g, "},{");
+      fixed = fixed.replace(/\]\s*\{/g, "],{");
+      fixed = fixed.replace(/"\s*"/g, '","');
 
       // 8. Fix premature object closure: }, "findings": -> , "findings":
-      fixed = fixed.replace(/\}\s*,\s*"(findings|qualityScore|securityScore|summary)"\s*:/g, ', "$1":');
+      fixed = fixed.replace(
+        /\}\s*,\s*"(findings|qualityScore|securityScore|summary)"\s*:/g,
+        ', "$1":',
+      );
 
       // 9. Fix literal newlines inside strings (very common failure)
       // This regex looks for content between quotes and replaces actual newlines with \n
       fixed = fixed.replace(/"([^"\\]*(\\.[^"\\]*)*)"/g, (match) => {
-        return match.replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+        return match.replace(/\n/g, "\\n").replace(/\r/g, "\\r");
       });
 
       // 10. Fix backslashes escaping the closing quote: \" -> \\"
@@ -619,13 +694,13 @@ Return your response in strict JSON format:
       // 11. Discard trailing "babble" (text after the last root brace)
 
       // 9. Discard trailing "babble" (text after the last root brace)
-      const rootOpenIndex = fixed.indexOf('{');
+      const rootOpenIndex = fixed.indexOf("{");
       if (rootOpenIndex !== -1) {
         let depth = 0;
         let lastMatch = -1;
         for (let i = rootOpenIndex; i < fixed.length; i++) {
-          if (fixed[i] === '{') depth++;
-          if (fixed[i] === '}') depth--;
+          if (fixed[i] === "{") depth++;
+          if (fixed[i] === "}") depth--;
           if (depth === 0) {
             lastMatch = i;
             break;
@@ -641,34 +716,42 @@ Return your response in strict JSON format:
       let bracketCount = 0;
       let inString = false;
       for (let i = 0; i < fixed.length; i++) {
-        if (fixed[i] === '"' && fixed[i-1] !== '\\') inString = !inString;
+        if (fixed[i] === '"' && fixed[i - 1] !== "\\") inString = !inString;
         if (!inString) {
-          if (fixed[i] === '{') braceCount++;
-          if (fixed[i] === '}') braceCount--;
-          if (fixed[i] === '[') bracketCount++;
-          if (fixed[i] === ']') bracketCount--;
+          if (fixed[i] === "{") braceCount++;
+          if (fixed[i] === "}") braceCount--;
+          if (fixed[i] === "[") bracketCount++;
+          if (fixed[i] === "]") bracketCount--;
         }
       }
-      
-      while (bracketCount > 0) { fixed += ']'; bracketCount--; }
-      while (braceCount > 0) { fixed += '}'; braceCount--; }
+
+      while (bracketCount > 0) {
+        fixed += "]";
+        bracketCount--;
+      }
+      while (braceCount > 0) {
+        fixed += "}";
+        braceCount--;
+      }
 
       try {
         return JSON.parse(fixed);
       } catch (e2) {
         this.logger.error(`JSON recovery failed: ${e2.message}`);
         this.logger.debug(`Attempted fix: ${fixed}`);
-        
+
         // Final fallback: Regex extraction for critical fields
         const qualityMatch = content.match(/"qualityScore":\s*(\d+)/);
         const securityMatch = content.match(/"securityScore":\s*(\d+)/);
         const summaryMatch = content.match(/"summary":\s*"([^"]+)"/);
-        
+
         return {
           findings: [],
           qualityScore: qualityMatch ? parseInt(qualityMatch[1], 10) : 0,
           securityScore: securityMatch ? parseInt(securityMatch[1], 10) : 0,
-          summary: summaryMatch ? summaryMatch[1] : 'Critical: AI generated invalid JSON. Please check logs.'
+          summary: summaryMatch
+            ? summaryMatch[1]
+            : "Critical: AI generated invalid JSON. Please check logs.",
         };
       }
     }
@@ -688,9 +771,9 @@ Return your response in strict JSON format:
     for (const agent of agentResponses) {
       const content = agent.content || {};
       const agentFindings = content.findings || [];
-      
-      qTotal += (content.qualityScore || 0);
-      sTotal += (content.securityScore || 0);
+
+      qTotal += content.qualityScore || 0;
+      sTotal += content.securityScore || 0;
       count++;
 
       for (const f of agentFindings) {
@@ -718,7 +801,7 @@ Return your response in strict JSON format:
     owner: string,
     repoName: string,
     headSha: string,
-    state: 'pending' | 'success' | 'failure' | 'error',
+    state: "pending" | "success" | "failure" | "error",
     description: string,
   ) {
     return this.githubService.updateCommitStatus(
@@ -727,7 +810,7 @@ Return your response in strict JSON format:
       repoName,
       headSha,
       state,
-      description
+      description,
     );
   }
 
@@ -735,41 +818,56 @@ Return your response in strict JSON format:
    * Compares the current findings with findings from the previous analysis
    * on the same PR. If an old finding is no longer present, mark it resolved.
    */
-  private async resolveOldFindings(owner: string, repoName: string, prNumber: number, currentFindings: any[], githubToken: string) {
+  private async resolveOldFindings(
+    owner: string,
+    repoName: string,
+    prNumber: number,
+    currentFindings: any[],
+    githubToken: string,
+  ) {
     // 1. Fetch previous analysis for this PR
     const analyses = await this.prisma.analysis.findMany({
       where: { repoName, prNumber },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       take: 2, // We want the one right before the current one
-      include: { findings: true }
+      include: { findings: true },
     });
 
     if (analyses.length < 2) return; // No previous analysis to compare with
 
     const previousAnalysis = analyses[1];
-    
+
     for (const oldFinding of previousAnalysis.findings) {
-      if (oldFinding.status === 'resolved') continue;
+      if (oldFinding.status === "resolved") continue;
 
       // Check if it exists in the current findings (match by file and similar issue type/rationale snippet)
       // Since line numbers can shift when code is added/removed above, matching by line exactly is brittle.
       // We will match by file and issue type.
-      const isStillPresent = currentFindings.some(newFinding => 
-        newFinding.file === oldFinding.file && newFinding.type === oldFinding.type
+      const isStillPresent = currentFindings.some(
+        (newFinding) =>
+          newFinding.file === oldFinding.file &&
+          newFinding.type === oldFinding.type,
       );
 
       if (!isStillPresent) {
         // Mark as resolved in database
         await this.prisma.finding.update({
           where: { id: oldFinding.id },
-          data: { status: 'resolved' }
+          data: { status: "resolved" },
         });
 
-        this.logger.log(`Marking previous finding as resolved: ${oldFinding.id} (Comment: ${oldFinding.githubCommentId})`);
+        this.logger.log(
+          `Marking previous finding as resolved: ${oldFinding.id} (Comment: ${oldFinding.githubCommentId})`,
+        );
 
         // Mark as resolved on GitHub
         if (oldFinding.githubCommentId) {
-          await this.githubService.markCommentAsResolved(githubToken, owner, repoName, oldFinding.githubCommentId);
+          await this.githubService.markCommentAsResolved(
+            githubToken,
+            owner,
+            repoName,
+            oldFinding.githubCommentId,
+          );
         }
       }
     }

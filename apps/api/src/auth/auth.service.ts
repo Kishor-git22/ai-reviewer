@@ -1,20 +1,20 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common'
-import { JwtService } from '@nestjs/jwt'
-import { ConfigService } from '@nestjs/config'
-import axios from 'axios'
-import { UsersService } from '../users/users.service'
-import { User } from '@prisma/client'
+import { Injectable, UnauthorizedException } from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
+import { ConfigService } from "@nestjs/config";
+import axios from "axios";
+import { UsersService } from "../users/users.service";
+import { User } from "@prisma/client";
 
 interface GitHubUser {
-  id: number
-  login: string
-  avatar_url: string
-  email: string | null
+  id: number;
+  login: string;
+  avatar_url: string;
+  email: string | null;
 }
 
 interface GitHubSyncResponse {
-  user: User
-  accessToken: string
+  user: User;
+  accessToken: string;
 }
 
 @Injectable()
@@ -22,7 +22,7 @@ export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
-    private readonly configService: ConfigService
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -33,10 +33,10 @@ export class AuthService {
    */
   async syncGitHubUser(accessToken: string): Promise<GitHubSyncResponse> {
     // Fetch GitHub user profile
-    const githubUser = await this.fetchGitHubUser(accessToken)
+    const githubUser = await this.fetchGitHubUser(accessToken);
 
     if (!githubUser) {
-      throw new UnauthorizedException('Invalid GitHub access token')
+      throw new UnauthorizedException("Invalid GitHub access token");
     }
 
     // Upsert user in database
@@ -48,34 +48,39 @@ export class AuthService {
         avatarUrl: githubUser.avatar_url,
         email: githubUser.email || undefined,
         githubToken: accessToken,
-      }
-    )
+      },
+    );
 
     // Generate JWT token
-    const token = this.generateJwtToken(user)
+    const token = this.generateJwtToken(user);
 
     return {
       user,
       accessToken: token,
-    }
+    };
   }
 
   /**
    * Fetch GitHub user profile using access token
    */
-  private async fetchGitHubUser(accessToken: string): Promise<GitHubUser | null> {
+  private async fetchGitHubUser(
+    accessToken: string,
+  ): Promise<GitHubUser | null> {
     try {
-      const response = await axios.get<GitHubUser>('https://api.github.com/user', {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          Accept: 'application/vnd.github.v3+json',
+      const response = await axios.get<GitHubUser>(
+        "https://api.github.com/user",
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: "application/vnd.github.v3+json",
+          },
         },
-      })
+      );
 
-      return response.data
+      return response.data;
     } catch (error) {
-      console.error('Failed to fetch GitHub user:', error.message)
-      return null
+      console.error("Failed to fetch GitHub user:", error.message);
+      return null;
     }
   }
 
@@ -87,19 +92,19 @@ export class AuthService {
       sub: user.id,
       githubId: user.githubId,
       username: user.username,
-    }
+    };
 
-    return this.jwtService.sign(payload)
+    return this.jwtService.sign(payload);
   }
 
   /**
    * Validate JWT payload and return user
    */
   async validateJwtPayload(payload: {
-    sub: string
-    githubId: string
-    username: string
+    sub: string;
+    githubId: string;
+    username: string;
   }): Promise<User | null> {
-    return this.usersService.findById(payload.sub)
+    return this.usersService.findById(payload.sub);
   }
 }

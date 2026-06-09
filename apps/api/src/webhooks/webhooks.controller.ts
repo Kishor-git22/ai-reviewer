@@ -1,15 +1,22 @@
-import { Controller, Post, Body, UseGuards, Request, Param } from '@nestjs/common';
-import { WebhooksService } from './webhooks.service';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import {
+  Controller,
+  Post,
+  Body,
+  UseGuards,
+  Request,
+  Param,
+} from "@nestjs/common";
+import { WebhooksService } from "./webhooks.service";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 
-@Controller('webhooks')
+@Controller("webhooks")
 export class WebhooksController {
   constructor(private readonly webhooksService: WebhooksService) {}
 
   /**
    * Endpoint for GitHub to send webhooks to
    */
-  @Post('github')
+  @Post("github")
   async handleGithubWebhook(@Body() payload: any) {
     return this.webhooksService.handleGithubWebhook(payload);
   }
@@ -18,18 +25,18 @@ export class WebhooksController {
    * Endpoint for the frontend to register a webhook for a repository
    */
   @UseGuards(JwtAuthGuard)
-  @Post('register/:owner/:repo')
+  @Post("register/:owner/:repo")
   async register(
     @Request() req,
-    @Param('owner') owner: string,
-    @Param('repo') repo: string,
-    @Body() body: { githubToken: string }
+    @Param("owner") owner: string,
+    @Param("repo") repo: string,
+    @Body() body: { githubToken: string },
   ) {
     return this.webhooksService.registerWebhook(
       req.user.id,
       owner,
       repo,
-      body.githubToken
+      body.githubToken,
     );
   }
 
@@ -37,18 +44,18 @@ export class WebhooksController {
    * Endpoint for the frontend to unregister a webhook for a repository
    */
   @UseGuards(JwtAuthGuard)
-  @Post('unregister/:owner/:repo')
+  @Post("unregister/:owner/:repo")
   async unregister(
     @Request() req,
-    @Param('owner') owner: string,
-    @Param('repo') repo: string,
-    @Body() body: { githubToken: string }
+    @Param("owner") owner: string,
+    @Param("repo") repo: string,
+    @Body() body: { githubToken: string },
   ) {
     return this.webhooksService.unregisterWebhook(
       req.user.id,
       owner,
       repo,
-      body.githubToken
+      body.githubToken,
     );
   }
 }
