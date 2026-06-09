@@ -50,7 +50,7 @@ export class GithubService {
 
       // Match them back to our findings based on path, line, and a snippet of the body
       for (const finding of findings) {
-        const match = reviewComments.data.find(c => c.path === finding.file && c.line === finding.line && c.body.includes(finding.type));
+        const match = reviewComments.data.find(c => c.path === finding.file && (c.line === finding.line || c.original_line === finding.line) && c.body.includes(finding.type));
         if (match) {
           commentIds[finding.id] = match.id.toString();
         }
