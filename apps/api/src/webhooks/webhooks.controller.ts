@@ -32,4 +32,23 @@ export class WebhooksController {
       body.githubToken
     );
   }
+
+  /**
+   * Endpoint for the frontend to unregister a webhook for a repository
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post('unregister/:owner/:repo')
+  async unregister(
+    @Request() req,
+    @Param('owner') owner: string,
+    @Param('repo') repo: string,
+    @Body() body: { githubToken: string }
+  ) {
+    return this.webhooksService.unregisterWebhook(
+      req.user.id,
+      owner,
+      repo,
+      body.githubToken
+    );
+  }
 }
