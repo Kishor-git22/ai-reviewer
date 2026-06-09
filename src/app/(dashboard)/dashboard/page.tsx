@@ -180,33 +180,49 @@ export default function DashboardPage() {
     selectedPr ? (selectedPr as any).number : undefined
   )
 
-  // Rehydrate state from URL on load/refresh
+  // Rehydrate state from URL on load/refresh/back-navigation
   useEffect(() => {
     const owner = searchParams.get('owner')
     const repoName = searchParams.get('repo')
     const prNumber = searchParams.get('pr')
 
-    if (repos && owner && repoName && !selectedRepo) {
+    // Handle Repo Selection
+    if (!owner || !repoName) {
+      if (selectedRepo) setSelectedRepo(null)
+    } else if (repos && (!selectedRepo || selectedRepo.name !== repoName || selectedRepo.owner.login !== owner)) {
       const repo = repos.find(r => r.owner.login === owner && r.name === repoName)
       if (repo) setSelectedRepo(repo)
     }
 
-    if (prs && prNumber && !selectedPr) {
+    // Handle PR Selection
+    if (!prNumber) {
+      if (selectedPr) {
+        setSelectedPr(null)
+        setShowModelSelection(false)
+        setCurrentAnalysisId(null)
+      }
+    } else if (prs && (!selectedPr || (selectedPr as any).number.toString() !== prNumber)) {
       const pr = prs.find(p => (p as any).number.toString() === prNumber)
-      if (pr) {
-        setSelectedPr(pr)
-        // If we have a PR but no analysis yet, show model selection
-        if (!currentAnalysisId) setShowModelSelection(true)
+      if (pr) setSelectedPr(pr)
+    }
+  }, [repos, prs, searchParams, selectedRepo, selectedPr])
+
+  // Handle Analysis State & Flash of Setup Screen
+  useEffect(() => {
+    if (selectedPr) {
+      if (isPrAnalysisLoading) {
+        // Still fetching from backend, wait...
+        return;
+      }
+      if (prAnalysis) {
+        setCurrentAnalysisId(prAnalysis.id)
+        setShowModelSelection(false)
+      } else if (!currentAnalysisId) {
+        // Finished loading and no analysis exists
+        setShowModelSelection(true)
       }
     }
-  }, [repos, prs, searchParams, selectedRepo, selectedPr, currentAnalysisId])
-
-  useEffect(() => {
-    if (selectedPr && prAnalysis) {
-      setCurrentAnalysisId(prAnalysis.id)
-      setShowModelSelection(false)
-    }
-  }, [selectedPr, prAnalysis])
+  }, [selectedPr, prAnalysis, isPrAnalysisLoading, currentAnalysisId])
 
   const analyzeMutation = useAnalyzePR()
   const unregisterMutation = useUnregisterWebhook()
