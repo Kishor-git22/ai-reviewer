@@ -121,7 +121,6 @@ function LandingContent() {
                 3 massive AI models to eliminate false positives.
               </p>
 
-
               <div className="flex flex-col items-center justify-center gap-4 sm:flex-row lg:justify-start">
                 <Button
                   onClick={handleLogin}

@@ -38,16 +38,25 @@ interface AnalysisViewProps {
 function FindingCard({ finding }: { finding: BackendFinding }) {
   const isCritical = finding.type === 'Critical' || finding.type === 'Vulnerability'
   const isWarning = finding.type === 'Warning'
-  
+
   const Icon = isCritical ? Shield : isWarning ? AlertCircle : Info
   const color = isCritical ? 'text-red-400' : isWarning ? 'text-yellow-400' : 'text-blue-400'
   const bg = isCritical ? 'bg-red-500/10' : isWarning ? 'bg-yellow-500/10' : 'bg-blue-500/10'
-  const border = isCritical ? 'border-red-500/20' : isWarning ? 'border-yellow-500/20' : 'border-blue-500/20'
+  const border = isCritical
+    ? 'border-red-500/20'
+    : isWarning
+      ? 'border-yellow-500/20'
+      : 'border-blue-500/20'
 
   const isResolved = finding?.status === 'resolved'
 
   return (
-    <Card className={cn("overflow-hidden border-border/50 bg-card/30 backdrop-blur-sm transition-all hover:border-primary/30 hover:bg-card/50", isResolved && "opacity-60 grayscale-[0.5]")}>
+    <Card
+      className={cn(
+        'overflow-hidden border-border/50 bg-card/30 backdrop-blur-sm transition-all hover:border-primary/30 hover:bg-card/50',
+        isResolved && 'opacity-60 grayscale-[0.5]'
+      )}
+    >
       <CardHeader className="pb-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2">
@@ -59,7 +68,7 @@ function FindingCard({ finding }: { finding: BackendFinding }) {
             {isResolved && (
               <Badge
                 variant="outline"
-                className="border-green-500/30 bg-green-500/20 text-[10px] text-green-500 font-bold"
+                className="border-green-500/30 bg-green-500/20 text-[10px] font-bold text-green-500"
               >
                 ✅ Resolved
               </Badge>
@@ -92,7 +101,12 @@ function FindingCard({ finding }: { finding: BackendFinding }) {
             {finding.file}:{finding.line}
           </div>
         </div>
-        <CardTitle className={cn("mt-2 text-xl font-black tracking-tight text-foreground", isResolved && "text-muted-foreground")}>
+        <CardTitle
+          className={cn(
+            'mt-2 text-xl font-black tracking-tight text-foreground',
+            isResolved && 'text-muted-foreground'
+          )}
+        >
           {finding.issue}
         </CardTitle>
       </CardHeader>
@@ -102,7 +116,9 @@ function FindingCard({ finding }: { finding: BackendFinding }) {
           {/* Analysis Rationale */}
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-              <div className={cn("h-1.5 w-1.5 rounded-full", isCritical ? "bg-red-500" : "bg-primary")} />
+              <div
+                className={cn('h-1.5 w-1.5 rounded-full', isCritical ? 'bg-red-500' : 'bg-primary')}
+              />
               The &quot;Why&quot;
             </div>
             <p className="text-sm font-medium leading-relaxed text-foreground/80">
@@ -167,7 +183,11 @@ function FindingCard({ finding }: { finding: BackendFinding }) {
             )}
 
             <AgentDebateLog finding={finding as any}>
-              <Button variant="ghost" size="sm" className="h-8 gap-1.5 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-accent">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1.5 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-accent"
+              >
                 <MessageSquare className="h-3 w-3" />
                 Debate Log
               </Button>
@@ -179,17 +199,17 @@ function FindingCard({ finding }: { finding: BackendFinding }) {
   )
 }
 
-function CommitGroup({ 
-  commitSha, 
-  findings, 
-  isLatest 
-}: { 
-  commitSha: string; 
-  findings: BackendFinding[];
-  isLatest?: boolean;
+function CommitGroup({
+  commitSha,
+  findings,
+  isLatest,
+}: {
+  commitSha: string
+  findings: BackendFinding[]
+  isLatest?: boolean
 }) {
-  const confirmed = findings.filter(f => f.consensus)
-  const single = findings.filter(f => !f.consensus)
+  const confirmed = findings.filter((f) => f.consensus)
+  const single = findings.filter((f) => !f.consensus)
 
   return (
     <div className="space-y-8">
@@ -237,19 +257,19 @@ function CommitGroup({
 
 export function AnalysisView({ pr, analysis, history = [], onBack }: AnalysisViewProps) {
   const isProcessing = analysis.status === 'in_progress' || analysis.status === 'pending'
-  
+
   // Combine all findings from history
   const allAnalyses = [...history]
-  if (!allAnalyses.find(a => a.id === analysis.id)) {
+  if (!allAnalyses.find((a) => a.id === analysis.id)) {
     allAnalyses.push(analysis)
   }
 
   const completedFindings = allAnalyses
-    .filter(a => a.status === 'completed')
-    .flatMap(a => a.findings || [])
+    .filter((a) => a.status === 'completed')
+    .flatMap((a) => a.findings || [])
 
   const findingsByCommit: Record<string, BackendFinding[]> = {}
-  completedFindings.forEach(f => {
+  completedFindings.forEach((f) => {
     const sha = f.commitSha || 'unknown'
     if (!findingsByCommit[sha]) findingsByCommit[sha] = []
     findingsByCommit[sha].push(f)
@@ -263,36 +283,38 @@ export function AnalysisView({ pr, analysis, history = [], onBack }: AnalysisVie
   })
 
   const totalFindingsCount = completedFindings.length
-  const confirmedCount = completedFindings.filter(f => f.consensus).length
+  const confirmedCount = completedFindings.filter((f) => f.consensus).length
 
   return (
     <div className="flex min-h-full flex-col">
       {/* Main Content Area */}
       <div className="mx-auto w-full max-w-7xl space-y-8 p-4 sm:p-8">
-        
         {/* Header with Loader */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-black tracking-tight text-foreground flex items-center gap-3">
+            <h1 className="flex items-center gap-3 text-3xl font-black tracking-tight text-foreground">
               AI Review
               {isProcessing && (
-                <Badge className="bg-primary/20 text-primary border-primary/20 animate-pulse">
+                <Badge className="animate-pulse border-primary/20 bg-primary/20 text-primary">
                   <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
                   Analyzing New Changes...
                 </Badge>
               )}
               {analysis.status === 'stopped' && (
-                <Badge variant="destructive" className="bg-red-500/20 text-red-400 border-red-500/20">
+                <Badge
+                  variant="destructive"
+                  className="border-red-500/20 bg-red-500/20 text-red-400"
+                >
                   <AlertCircle className="mr-2 h-3 w-3" />
                   Analysis Stopped
                 </Badge>
               )}
             </h1>
-            <p className="text-sm font-bold text-muted-foreground mt-1">
+            <p className="mt-1 text-sm font-bold text-muted-foreground">
               {analysis.status === 'stopped'
-                ? "The AI analysis has been stopped because the pull request has been closed."
-                : isProcessing 
-                  ? "New changes found in the pull request. AI agents are reviewing them now." 
+                ? 'The AI analysis has been stopped because the pull request has been closed.'
+                : isProcessing
+                  ? 'New changes found in the pull request. AI agents are reviewing them now.'
                   : `Comprehensive analysis for PR #${(pr as any)?.number || ''}`}
             </p>
           </div>
@@ -311,7 +333,9 @@ export function AnalysisView({ pr, analysis, history = [], onBack }: AnalysisVie
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
           <Card className="border-border/50 bg-accent/20">
             <CardContent className="p-4 text-center">
-              <div className="text-2xl font-black text-blue-400 sm:text-3xl">{analysis.qualityScore || 0}%</div>
+              <div className="text-2xl font-black text-blue-400 sm:text-3xl">
+                {analysis.qualityScore || 0}%
+              </div>
               <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
                 Quality
               </div>
@@ -319,7 +343,9 @@ export function AnalysisView({ pr, analysis, history = [], onBack }: AnalysisVie
           </Card>
           <Card className="border-border/50 bg-accent/20">
             <CardContent className="p-4 text-center">
-              <div className="text-2xl font-black text-red-400 sm:text-3xl">{analysis.securityScore || 0}%</div>
+              <div className="text-2xl font-black text-red-400 sm:text-3xl">
+                {analysis.securityScore || 0}%
+              </div>
               <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
                 Security
               </div>
@@ -327,7 +353,9 @@ export function AnalysisView({ pr, analysis, history = [], onBack }: AnalysisVie
           </Card>
           <Card className="border-border/50 bg-accent/20">
             <CardContent className="p-4 text-center">
-              <div className="text-2xl font-black text-purple-400 sm:text-3xl">{totalFindingsCount}</div>
+              <div className="text-2xl font-black text-purple-400 sm:text-3xl">
+                {totalFindingsCount}
+              </div>
               <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
                 Issues
               </div>
@@ -335,9 +363,7 @@ export function AnalysisView({ pr, analysis, history = [], onBack }: AnalysisVie
           </Card>
           <Card className="border-border/50 bg-accent/20">
             <CardContent className="p-4 text-center">
-              <div className="text-2xl font-black text-green-400 sm:text-3xl">
-                {confirmedCount}
-              </div>
+              <div className="text-2xl font-black text-green-400 sm:text-3xl">{confirmedCount}</div>
               <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
                 Consensus
               </div>
@@ -357,7 +383,8 @@ export function AnalysisView({ pr, analysis, history = [], onBack }: AnalysisVie
                   AI Debate Summary
                 </h3>
                 <p className="text-sm font-medium leading-relaxed text-muted-foreground">
-                  {analysis.summary || 'Consensus building completed. Review the confirmed findings below.'}
+                  {analysis.summary ||
+                    'Consensus building completed. Review the confirmed findings below.'}
                 </p>
               </div>
             </div>
@@ -367,10 +394,10 @@ export function AnalysisView({ pr, analysis, history = [], onBack }: AnalysisVie
         {/* Findings Grouped by Commit */}
         <div className="space-y-12">
           {sortedCommits.map((sha, index) => (
-            <CommitGroup 
-              key={sha} 
-              commitSha={sha} 
-              findings={findingsByCommit[sha]} 
+            <CommitGroup
+              key={sha}
+              commitSha={sha}
+              findings={findingsByCommit[sha]}
               isLatest={index === 0}
             />
           ))}
@@ -384,24 +411,25 @@ export function AnalysisView({ pr, analysis, history = [], onBack }: AnalysisVie
             </div>
             <h3 className="text-xl font-black text-foreground">No Issues Found</h3>
             <p className="mx-auto max-w-sm text-sm font-medium text-muted-foreground">
-              Prism&apos;s multi-agent review system found zero vulnerabilities or quality issues in this
-              pull request.
+              Prism&apos;s multi-agent review system found zero vulnerabilities or quality issues in
+              this pull request.
             </p>
           </div>
         )}
 
         {isProcessing && totalFindingsCount === 0 && (
-          <div className="flex flex-col items-center justify-center py-20 text-center space-y-6">
+          <div className="flex flex-col items-center justify-center space-y-6 py-20 text-center">
             <div className="relative">
               <div className="absolute -inset-4 animate-pulse rounded-full bg-primary/20 blur-xl" />
-              <div className="relative flex h-20 w-20 items-center justify-center rounded-2xl bg-card border border-primary shadow-xl">
+              <div className="relative flex h-20 w-20 items-center justify-center rounded-2xl border border-primary bg-card shadow-xl">
                 <Loader2 className="h-10 w-10 animate-spin text-primary" />
               </div>
             </div>
             <div className="space-y-2">
               <h3 className="text-xl font-black text-foreground">Analyzing Your Changes</h3>
-              <p className="text-sm font-bold text-muted-foreground max-w-xs">
-                Our AI agents are currently debating the new code. Findings will appear here shortly.
+              <p className="max-w-xs text-sm font-bold text-muted-foreground">
+                Our AI agents are currently debating the new code. Findings will appear here
+                shortly.
               </p>
             </div>
           </div>

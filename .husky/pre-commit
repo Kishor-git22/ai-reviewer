@@ -1,1 +1,11 @@
+#!/bin/sh
+# Add common Node install locations to PATH for GUI clients like GitHub Desktop
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
+# Load NVM if it exists
+if [ -s "$HOME/.nvm/nvm.sh" ]; then
+  export NVM_DIR="$HOME/.nvm"
+  [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+fi
+
 npx lint-staged

@@ -13,13 +13,13 @@ export function useAnalysis(id: string | null) {
     queryKey: ['analysis', id],
     queryFn: async (): Promise<Analysis | null> => {
       if (!id) return null
-      
+
       const response = await fetch(`${API_URL}/reviewer/analysis/${id}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       })
-      
+
       if (!response.ok) throw new Error('Failed to fetch analysis')
       return response.json()
     },
@@ -27,7 +27,7 @@ export function useAnalysis(id: string | null) {
     refetchInterval: (query) => {
       // Poll if analysis is in progress or pending
       const analysis = query.state.data as Analysis | null
-      return (analysis?.status === 'in_progress' || analysis?.status === 'pending') ? 3000 : false
+      return analysis?.status === 'in_progress' || analysis?.status === 'pending' ? 3000 : false
     },
   })
 }
@@ -41,13 +41,13 @@ export function useAnalysisByPr(repoName: string | undefined, prNumber: number |
     queryKey: ['analysis', repoName, prNumber],
     queryFn: async (): Promise<Analysis | null> => {
       if (!repoName || !prNumber) return null
-      
+
       const response = await fetch(`${API_URL}/reviewer/repo/${repoName}/pr/${prNumber}/analysis`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       })
-      
+
       if (!response.ok) return null // If not found, it returns 404 or empty
       const text = await response.text()
       if (!text) return null
@@ -56,7 +56,7 @@ export function useAnalysisByPr(repoName: string | undefined, prNumber: number |
     enabled: !!repoName && !!prNumber && !!token,
     refetchInterval: (query) => {
       const analysis = query.state.data as Analysis | null
-      return (analysis?.status === 'in_progress' || analysis?.status === 'pending') ? 3000 : false
+      return analysis?.status === 'in_progress' || analysis?.status === 'pending' ? 3000 : false
     },
   })
 }
@@ -70,20 +70,20 @@ export function useAnalysisHistory(repoName: string | undefined, prNumber: numbe
     queryKey: ['analysis-history', repoName, prNumber],
     queryFn: async (): Promise<Analysis[]> => {
       if (!repoName || !prNumber) return []
-      
+
       const response = await fetch(`${API_URL}/reviewer/repo/${repoName}/pr/${prNumber}/history`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       })
-      
+
       if (!response.ok) return []
       return response.json()
     },
     enabled: !!repoName && !!prNumber && !!token,
     refetchInterval: (query) => {
       const history = query.state.data as Analysis[]
-      const hasActive = history?.some(a => a.status === 'in_progress' || a.status === 'pending')
+      const hasActive = history?.some((a) => a.status === 'in_progress' || a.status === 'pending')
       return hasActive ? 3000 : false
     },
   })
