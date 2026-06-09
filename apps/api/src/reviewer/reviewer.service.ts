@@ -299,7 +299,7 @@ export class ReviewerService {
       // 5. Extract valid paths from diff to prevent GitHub 422 errors
       const validPaths = new Set(
         Array.from(
-          processedDiff.matchAll(/^(?:\+\+\+|---) [ab]\/(.*?)(?:[ \t].*)?$/gm),
+          processedDiff.matchAll(/^(?:\+\+\+|---) [ab]\/([^ \t\r\n]+)/gm),
         )
           .map((m) => m[1])
           .filter(Boolean),
