@@ -104,17 +104,17 @@ function PRListItem({
         <div
           className={cn(
             'flex h-12 w-12 items-center justify-center rounded-2xl transition-transform group-hover:scale-110',
-            ((pr as any).status === 'In Progress' || (pr as any).status === 'in_progress' || (pr as any).status === 'pending') ? 'bg-blue-500/10 text-blue-400' :
-            ((pr as any).status === 'stopped' || (pr as any).status === 'failed' || pr.vuls > 0) ? 'bg-red-500/10 text-red-400' :
-            ((pr as any).status === 'Pending Review' || (pr as any).status === 'unreviewed') ? 'bg-muted/10 text-muted-foreground' :
+            (pr.status as string === 'in_progress' || pr.status as string === 'pending' || pr.status === 'In Progress') ? 'bg-blue-500/10 text-blue-400' :
+            (pr.status as string === 'stopped' || pr.status as string === 'failed' || pr.vuls > 0) ? 'bg-red-500/10 text-red-400' :
+            (pr.status as string === 'unreviewed' || pr.status === 'Pending Review') ? 'bg-muted/10 text-muted-foreground' :
             'bg-green-500/10 text-green-400'
           )}
         >
-          {((pr as any).status === 'In Progress' || (pr as any).status === 'in_progress' || (pr as any).status === 'pending') ? (
+          {(pr.status as string === 'in_progress' || pr.status as string === 'pending' || pr.status === 'In Progress') ? (
             <Loader2 className="animate-spin" size={22} />
-          ) : ((pr as any).status === 'stopped' || (pr as any).status === 'failed' || pr.vuls > 0) ? (
+          ) : (pr.status as string === 'stopped' || pr.status as string === 'failed' || pr.vuls > 0) ? (
             <AlertCircle size={22} />
-          ) : ((pr as any).status === 'Pending Review' || (pr as any).status === 'unreviewed') ? (
+          ) : (pr.status as string === 'unreviewed' || pr.status === 'Pending Review') ? (
             <GitPullRequest size={22} />
           ) : (
             <CheckCircle2 size={22} />
@@ -153,44 +153,56 @@ export default function DashboardPage() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  const ownerParam = searchParams.get('owner')
-  const repoParam = searchParams.get('repo')
-  const prParam = searchParams.get('pr')
-
+  const [selectedRepo, setSelectedRepo] = useState<Repository | null>(null)
+  const [selectedPr, setSelectedPr] = useState<PullRequest | null>(null)
   const { data: userSettings } = useUserSettings()
   const selectedModels = userSettings?.selectedModels || ['llama-3.1', 'deepseek-v4-pro', 'mistral-medium-3.5']
 
-  const [forceSetup, setForceSetup] = useState(false)
-  const [activeAnalysisId, setActiveAnalysisId] = useState<string | null>(null)
+  const [showModelSelection, setShowModelSelection] = useState(false)
 
   const { data: repos, isLoading: isReposLoading, refetch: refetchRepos } = useRepos()
   const { data: activeRepos } = useActiveRepos()
   const registerMutation = useRegisterWebhook()
   
-  // Derived state from URL parameters
-  const selectedRepo = repos?.find(r => r.owner.login === ownerParam && r.name === repoParam) || null
-  
   const { data: prs, isLoading: isPrsLoading, refetch: refetchPrs } = useRepoPRs(
-    ownerParam || undefined,
-    repoParam || undefined
+    selectedRepo?.owner.login,
+    selectedRepo?.name
   )
   
-  const selectedPr = prs?.find(p => (p as any).number.toString() === prParam) || null
-
   const { data: prAnalysis, isLoading: isPrAnalysisLoading } = useAnalysisByPr(
-    repoParam || undefined, 
-    prParam ? parseInt(prParam) : undefined
+    selectedRepo?.name, 
+    selectedPr ? (selectedPr as any).number : undefined
   )
-  
   const { data: analysisHistory } = useAnalysisHistory(
-    repoParam || undefined,
-    prParam ? parseInt(prParam) : undefined
+    selectedRepo?.name,
+    selectedPr ? (selectedPr as any).number : undefined
   )
 
-  const currentAnalysisId = forceSetup ? null : (activeAnalysisId || prAnalysis?.id || null)
-  const { data: analysis, isLoading: isAnalysisLoading } = useAnalysis(currentAnalysisId)
-  
-  const showModelSelection = forceSetup || (!isPrAnalysisLoading && prParam && !currentAnalysisId)
+  // Rehydrate state from URL on load/refresh/back-navigation
+  useEffect(() => {
+    const owner = searchParams.get('owner')
+    const repoName = searchParams.get('repo')
+    const prNumber = searchParams.get('pr')
+
+    // Handle Repo Selection
+    if (!owner || !repoName) {
+      if (selectedRepo) setSelectedRepo(null)
+    } else if (repos && (!selectedRepo || selectedRepo.name !== repoName || selectedRepo.owner.login !== owner)) {
+      const repo = repos.find(r => r.owner.login === owner && r.name === repoName)
+      if (repo) setSelectedRepo(repo)
+    }
+
+    // Handle PR Selection
+    if (!prNumber) {
+      if (selectedPr) {
+        setSelectedPr(null)
+        setShowModelSelection(false)
+      }
+    } else if (prs && (!selectedPr || (selectedPr as any).number.toString() !== prNumber)) {
+      const pr = prs.find(p => (p as any).number.toString() === prNumber)
+      if (pr) setSelectedPr(pr)
+    }
+  }, [repos, prs, searchParams, selectedRepo, selectedPr])
 
   const analyzeMutation = useAnalyzePR()
   const unregisterMutation = useUnregisterWebhook()
@@ -224,22 +236,22 @@ export default function DashboardPage() {
   }
 
   const handleRepoClick = (repo: Repository) => {
-    setForceSetup(false)
-    setActiveAnalysisId(null)
+    setSelectedRepo(repo)
+    setShowModelSelection(false)
     updateUrl(repo.owner.login, repo.name)
   }
 
   const handlePrClick = (pr: PullRequest) => {
-    setForceSetup(false)
-    setActiveAnalysisId(null)
-    updateUrl(ownerParam || selectedRepo?.owner.login, repoParam || selectedRepo?.name, (pr as any).number.toString())
+    setSelectedPr(pr)
+    setShowModelSelection(true)
+    updateUrl(selectedRepo?.owner.login, selectedRepo?.name, (pr as any).number.toString())
   }
 
   const handleStartAnalysis = async () => {
     if (!selectedPr || !selectedRepo) return
 
     try {
-      const result = await analyzeMutation.mutateAsync({
+      await analyzeMutation.mutateAsync({
         repoName: selectedRepo.name,
         prNumber: (selectedPr as any).number,
         title: selectedPr.title,
@@ -247,23 +259,23 @@ export default function DashboardPage() {
         models: selectedModels,
         headSha: (selectedPr as any).headSha,
       })
-      setActiveAnalysisId(result.id)
-      setForceSetup(false)
+      setShowModelSelection(false)
     } catch (error) {
       console.error('Failed to start analysis:', error)
     }
   }
 
   const handleBackToRepos = () => {
-    setForceSetup(false)
-    setActiveAnalysisId(null)
+    setSelectedRepo(null)
+    setSelectedPr(null)
+    setShowModelSelection(false)
     updateUrl()
   }
 
   const handleBackToPrs = () => {
-    setForceSetup(false)
-    setActiveAnalysisId(null)
-    updateUrl(ownerParam || selectedRepo?.owner.login, repoParam || selectedRepo?.name)
+    setSelectedPr(null)
+    setShowModelSelection(false)
+    updateUrl(selectedRepo?.owner.login, selectedRepo?.name)
   }
 
   return (
@@ -283,38 +295,54 @@ export default function DashboardPage() {
               </Button>
             )}
             <h1 className="text-4xl font-black tracking-tight text-foreground">
-              {currentAnalysisId ? 'AI Review' : selectedPr ? 'Setup Review' : selectedRepo ? 'Pull Requests' : 'Overview'}
+              {selectedPr && prAnalysis?.status ? 'AI Review' : selectedPr ? 'Setup Review' : selectedRepo ? 'Pull Requests' : 'Overview'}
             </h1>
           </div>
           <p className="text-sm font-bold text-muted-foreground">
-            {currentAnalysisId 
-              ? (analysis?.status === 'completed' || (analysisHistory && analysisHistory.some(a => a.status === 'completed')))
+            {selectedPr 
+              ? prAnalysis?.status === 'completed'
                 ? `Comprehensive analysis for PR #${(selectedPr as any)?.number || searchParams.get('pr')}`
-                : analysis?.status === 'stopped'
+                : prAnalysis?.status === 'stopped'
                   ? `Analysis stopped for PR #${(selectedPr as any)?.number || searchParams.get('pr')}`
-                  : analysis?.status === 'failed'
+                  : prAnalysis?.status === 'failed'
                     ? `Analysis failed for PR #${(selectedPr as any)?.number || searchParams.get('pr')}`
-                    : `Multi-agent debate in progress for #${(selectedPr as any)?.number || searchParams.get('pr')}`
-              : selectedPr 
-                ? 'Configure your AI agents for this review.'
-                : selectedRepo 
-                  ? `Active PRs for ${selectedRepo.full_name}`
-                  : 'Select a repository to begin analysis.'}
+                    : prAnalysis?.status === 'in_progress' || prAnalysis?.status === 'pending'
+                      ? `Multi-agent debate in progress for #${(selectedPr as any)?.number || searchParams.get('pr')}`
+                      : 'Configure your AI agents for this review.'
+              : selectedRepo 
+                ? `Active PRs for ${selectedRepo.full_name}`
+                : 'Select a repository to begin analysis.'}
           </p>
         </div>
       </div>
 
       {/* Main Content Area */}
       <div className="flex-1 p-4 sm:p-10">
-        {currentAnalysisId ? (
-          (analysis?.status === 'completed' || (analysisHistory && analysisHistory.some(a => a.status === 'completed'))) ? (
-            <AnalysisView 
-              pr={selectedPr!} 
-              analysis={analysis || analysisHistory?.find(a => a.status === 'completed') || {} as any} 
-              history={analysisHistory}
-              onBack={handleBackToPrs} 
-            />
-          ) : analysis?.status === 'stopped' ? (
+        {selectedPr ? (
+          isPrAnalysisLoading ? (
+            <div className="flex h-full flex-col items-center justify-center space-y-8 py-20">
+              <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            </div>
+          ) : prAnalysis?.status === 'failed' ? (
+            <div className="flex h-full flex-col items-center justify-center space-y-8 py-20 text-center">
+              <div className="rounded-full bg-red-500/10 p-6 text-red-500 border border-red-500/20 shadow-2xl shadow-red-500/10">
+                <AlertCircle size={48} />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-2xl font-black text-foreground">Analysis Failed</h2>
+                <p className="text-sm font-bold text-muted-foreground max-w-md">
+                  The AI agents encountered an error while processing this Pull Request. This can happen with extremely large diffs or API timeouts.
+                </p>
+              </div>
+              <Button 
+                onClick={() => setShowModelSelection(true)} 
+                variant="outline" 
+                className="rounded-full px-8 h-12 font-black border-primary/20 hover:bg-primary/5 transition-all"
+              >
+                Retry Analysis
+              </Button>
+            </div>
+          ) : prAnalysis?.status === 'stopped' ? (
             <div className="flex h-full flex-col items-center justify-center space-y-8 py-20 text-center">
               <div className="rounded-full bg-red-500/10 p-6 text-red-500 border border-red-500/20 shadow-2xl shadow-red-500/10">
                 <AlertCircle size={48} />
@@ -333,33 +361,14 @@ export default function DashboardPage() {
                 Back to Pull Requests
               </Button>
             </div>
-          ) : analysis?.status === 'failed' ? (
-            <div className="flex h-full flex-col items-center justify-center space-y-8 py-20 text-center">
-              <div className="rounded-full bg-red-500/10 p-6 text-red-500 border border-red-500/20 shadow-2xl shadow-red-500/10">
-                <AlertCircle size={48} />
-              </div>
-              <div className="space-y-2">
-                <h2 className="text-2xl font-black text-foreground">Analysis Failed</h2>
-                <p className="text-sm font-bold text-muted-foreground max-w-md">
-                  The AI agents encountered an error while processing this Pull Request. This can happen with extremely large diffs or API timeouts.
-                </p>
-              </div>
-              <Button 
-                onClick={() => {
-                  setActiveAnalysisId(null);
-                  setForceSetup(true);
-                }} 
-                variant="outline" 
-                className="rounded-full px-8 h-12 font-black border-primary/20 hover:bg-primary/5 transition-all"
-              >
-                Retry Analysis
-              </Button>
-            </div>
-          ) : isAnalysisLoading ? (
-            <div className="flex h-full flex-col items-center justify-center space-y-8 py-20">
-              <Loader2 className="h-12 w-12 animate-spin text-primary" />
-            </div>
-          ) : (
+          ) : prAnalysis?.status === 'completed' || (analysisHistory && analysisHistory.some(a => a.status === 'completed')) ? (
+            <AnalysisView 
+              pr={selectedPr!} 
+              analysis={prAnalysis || analysisHistory?.find(a => a.status === 'completed') || {} as any} 
+              history={analysisHistory}
+              onBack={handleBackToPrs} 
+            />
+          ) : prAnalysis?.status === 'in_progress' || prAnalysis?.status === 'pending' ? (
             <div className="flex h-full flex-col items-center justify-center space-y-8 py-20">
               <div className="relative">
                 <div className="absolute -inset-4 animate-pulse rounded-full bg-primary/20 blur-xl" />
@@ -385,22 +394,38 @@ export default function DashboardPage() {
                 })}
               </div>
             </div>
-          )
-        ) : selectedPr && showModelSelection ? (
-          <div className="flex h-full flex-col items-center justify-center space-y-8 py-20">
-            <div className="relative">
-              <div className="absolute -inset-4 rounded-full bg-muted/20 blur-xl" />
-              <div className="relative flex h-24 w-24 items-center justify-center rounded-3xl bg-card border-2 border-muted shadow-lg">
-                <Cpu className="h-12 w-12 text-muted-foreground" />
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center space-y-8 py-20">
+              <div className="relative">
+                <div className="absolute -inset-4 rounded-full bg-muted/20 blur-xl" />
+                <div className="relative flex h-24 w-24 items-center justify-center rounded-3xl bg-card border-2 border-muted shadow-lg">
+                  <Cpu className="h-12 w-12 text-muted-foreground" />
+                </div>
+              </div>
+              <div className="max-w-md text-center space-y-6">
+                <div className="space-y-3">
+                  <h2 className="text-2xl font-black text-foreground">No AI Analysis Found</h2>
+                  <p className="text-sm font-bold text-muted-foreground">
+                    AI Analysis is not done for this pull request.
+                  </p>
+                </div>
+                <Button 
+                  onClick={handleStartAnalysis}
+                  disabled={analyzeMutation.isPending}
+                  className="rounded-full px-8 h-12 font-black transition-all shadow-lg hover:shadow-primary/25"
+                >
+                  {analyzeMutation.isPending ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Starting Analysis...
+                    </span>
+                  ) : (
+                    'Start AI Analysis'
+                  )}
+                </Button>
               </div>
             </div>
-            <div className="max-w-md text-center space-y-3">
-              <h2 className="text-2xl font-black text-foreground">No AI Analysis Found</h2>
-              <p className="text-sm font-bold text-muted-foreground">
-                AI Analysis is not done for this pull request.
-              </p>
-            </div>
-          </div>
+          )
         ) : (
           <div className="mx-auto max-w-7xl space-y-12">
             {/* ... stats grid same as before ... */}
@@ -428,7 +453,7 @@ export default function DashboardPage() {
                       <PRListItem
                         key={pr.id}
                         pr={pr}
-                        isSelected={selectedPr?.id === pr.id}
+                        isSelected={false}
                         onClick={() => handlePrClick(pr)}
                       />
                     ))}
