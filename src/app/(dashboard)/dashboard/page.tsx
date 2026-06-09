@@ -390,6 +390,10 @@ export default function DashboardPage() {
                 Retry Analysis
               </Button>
             </div>
+          ) : isAnalysisLoading ? (
+            <div className="flex h-full flex-col items-center justify-center space-y-8 py-20">
+              <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            </div>
           ) : (
             <div className="flex h-full flex-col items-center justify-center space-y-8 py-20">
               <div className="relative">
