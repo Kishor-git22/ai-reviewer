@@ -293,7 +293,7 @@ export function AnalysisView({ pr, analysis, history = [], onBack }: AnalysisVie
                 ? "The AI analysis has been stopped because the pull request has been closed."
                 : isProcessing 
                   ? "New changes found in the pull request. AI agents are reviewing them now." 
-                  : `Comprehensive analysis for PR #${(pr as any).number}`}
+                  : `Comprehensive analysis for PR #${(pr as any)?.number || ''}`}
             </p>
           </div>
         </div>
