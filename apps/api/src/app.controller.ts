@@ -11,7 +11,7 @@ export class AppController {
     try {
       await this.prisma.$queryRaw`SELECT 1`;
       dbStatus = "connected";
-    } catch (e) {
+    } catch {
       dbStatus = "disconnected";
     }
 

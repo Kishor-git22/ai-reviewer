@@ -24,7 +24,7 @@ export class PrismaService
         }
 
         url = urlObj.toString();
-      } catch (err) {
+      } catch {
         // Fallback if URL parsing fails for any reason
         if (!url.includes("pool_timeout")) {
           const separator = url.includes("?") ? "&" : "?";

@@ -626,7 +626,7 @@ Return your response in strict JSON format:
   private safeJsonParse(content: string): any {
     try {
       return JSON.parse(content);
-    } catch (e) {
+    } catch {
       this.logger.warn(`JSON parse failed, attempting recovery...`);
       this.logger.debug(
         `Malformed JSON snippet: ${content.substring(0, 100)}...`,
