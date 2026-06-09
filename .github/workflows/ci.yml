@@ -7,8 +7,8 @@ on:
     branches: [ "**" ]
 
 jobs:
-  quality-checks:
-    name: Lint, Format, and Typecheck
+  code-quality:
+    name: Code Quality
     runs-on: ubuntu-latest
 
     steps:
@@ -24,6 +24,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Dependency Vulnerability Audit
+        run: npm audit
+
       - name: Check Formatting
         run: npm run format:check
 
@@ -33,21 +36,10 @@ jobs:
       - name: Typecheck (TypeScript)
         run: npm run typecheck
 
-  dependency-audit:
-    name: Dependency Vulnerability Audit
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Run NPM Audit
-        run: npm audit
+      - name: Build Application
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
 
   security-scanning:
     name: CodeQL Security Scan
@@ -68,26 +60,3 @@ jobs:
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
-
-  build-check:
-    name: Build Next.js App
-    runs-on: ubuntu-latest
-    needs: [quality-checks, dependency-audit]
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build Application
-        run: npm run build
-        env:
-          NEXT_TELEMETRY_DISABLED: 1
