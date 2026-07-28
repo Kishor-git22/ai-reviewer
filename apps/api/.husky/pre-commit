@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+if [ -s "$HOME/.nvm/nvm.sh" ]; then
+  \. "$HOME/.nvm/nvm.sh"
+fi
+
+npx lint-staged
