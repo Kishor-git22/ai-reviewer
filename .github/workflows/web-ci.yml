@@ -1,0 +1,52 @@
+name: Web CI
+
+on:
+  push:
+    branches: ["main", "master"]
+    paths:
+      - "apps/web/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/web-ci.yml"
+  pull_request:
+    branches: ["**"]
+    paths:
+      - "apps/web/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/web-ci.yml"
+
+jobs:
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Dependency Vulnerability Audit
+        run: npm audit --workspace apps/web
+
+      - name: Check Formatting
+        run: npm run format:check --workspace apps/web
+
+      - name: Run ESLint
+        run: npm run lint --workspace apps/web
+
+      - name: Typecheck (TypeScript)
+        run: npm run typecheck --workspace apps/web
+
+      - name: Build Application
+        run: npm run build --workspace apps/web
+        env:
+          NEXT_TELEMETRY_DISABLED: 1

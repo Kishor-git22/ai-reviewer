@@ -1,213 +1,89 @@
-# Prism Web 💎
+# Prism 💎
 
-The frontend for **Prism**, an open-source AI code review platform. Prism takes a single Pull Request and refracts it through three different AI models to provide a high-confidence, multi-perspective analysis.
+**Prism** is an open-source AI code review platform. It takes a single Pull Request and refracts
+it through three different AI models to provide a high-confidence, multi-perspective analysis —
+findings are marked **Confirmed** only when 2 or more models agree.
 
-## 🚀 Overview
-
-- **Landing Page**: Immersive 3D prism visualization with GitHub authentication
-- **Dashboard**: Single-page layout with h-screen overflow-hidden for optimal PR review experience
-- **Refracted Consensus**: Findings are marked "Confirmed" only when 2+ AI agents agree
-- **Agent Debate**: View raw reasoning from all 3 models (Llama, Nemotron, Mixtral) via Sheet drawer
-- **User Control**: Custom model selection (pick 3 of 7 NVIDIA models)
-
-## 🛠 Tech Stack
-
-- **Framework**: [Next.js 15](https://nextjs.org/) (App Router, Server Components by default)
-- **Language**: [TypeScript](https://www.typescriptlang.org/) (Strict mode)
-- **Styling**: [Tailwind CSS](https://tailwindcss.com/) + [shadcn/ui](https://ui.shadcn.com/)
-- **Auth**: [NextAuth.js v5 (Beta)](https://authjs.dev/) (GitHub Provider - only scrapes `user.login` and `user.image`)
-- **Data Fetching**: [TanStack Query v5](https://tanstack.com/query/latest)
-- **3D Visuals**: [React Three Fiber](https://docs.pmnd.rs/react-three-fiber) + [Drei](https://github.com/pmndrs/drei)
-
-## 📁 Project Structure
+This repository is an **npm-workspaces monorepo** containing both halves of Prism:
 
 ```
-src/
-├── app/
-│   ├── (auth)/landing/       # Immersive 3D login page
-│   ├── (dashboard)/          # Protected dashboard routes
-│   │   ├── dashboard/
-│   │   │   ├── page.tsx      # PR list view
-│   │   │   └── settings/     # Model selection settings
-│   │   └── layout.tsx        # Dashboard layout with sidebar
-│   ├── api/auth/[...nextauth]/
-│   │   └── route.ts          # NextAuth API route
-│   ├── layout.tsx            # Root layout
-│   ├── page.tsx              # Home (redirects to dashboard if authenticated)
-│   ├── providers.tsx         # QueryClient + SessionProvider
-│   └── globals.css           # Tailwind + CSS variables
-├── components/
-│   ├── canvas/
-│   │   └── HeroPrism.tsx     # R3F 3D prism component
-│   ├── dashboard/
-│   │   ├── Sidebar.tsx       # shadcn/ui sidebar navigation
-│   │   ├── AnalysisView.tsx  # PR analysis with findings
-│   │   └── AgentDebateLog.tsx # Sheet drawer for agent reasoning
-│   └── ui/                   # shadcn/ui components
-├── hooks/
-│   ├── usePrAnalysis.ts      # TanStack Query hooks for PR data
-│   └── use-mobile.tsx        # Mobile detection hook
-├── lib/
-│   ├── auth.ts               # NextAuth v5 configuration
-│   ├── data.ts               # Mock data (NVIDIA models, PRs, findings)
-│   └── utils.ts              # Utility functions (cn, color helpers)
-└── types/
-    └── index.ts              # TypeScript interfaces
+prism/
+├── apps/
+│   ├── web/     # Next.js 15 frontend — dashboard, auth, 3D landing page
+│   └── api/     # NestJS backend — webhooks, AI consensus engine, GitHub auth
+└── package.json # workspace root
 ```
 
-## 🏗 Getting Started
+- [apps/web/README.md](apps/web/README.md) — frontend setup, tech stack, design system
+- [apps/api/README.md](apps/api/README.md) — backend setup, API reference, database schema
+
+## 🏗 Architecture
+
+1. **Webhook**: `apps/api` receives PR events from GitHub.
+2. **Queue**: Offloads review jobs to BullMQ to avoid webhook timeouts.
+3. **Worker**: Calls 3 NVIDIA NIM models in parallel, merges findings, dedupes by file/line.
+4. **Action**: Posts a summary comment and GitHub Check Run back on the PR.
+5. **Frontend**: `apps/web` authenticates via GitHub OAuth (NextAuth v5), syncs the user with the
+   API, and renders the refracted-consensus dashboard — confirmed findings, agent debate log,
+   and per-user model selection.
+
+## 🛠 Getting Started
 
 ### Prerequisites
 
 - Node.js 18+
-- GitHub OAuth App credentials
+- PostgreSQL 14+ (or a Supabase project) for the API
+- A GitHub OAuth App (shared client ID/secret used by both the frontend's NextAuth flow and the
+  backend's GitHub API calls)
 
-### Installation
+### Install
 
-1. **Clone and Install**:
-
-   ```bash
-   cd ai-reviewer-web
-   npm install
-   ```
-
-2. **Environment Variables**:
-   Copy `.env.local.example` to `.env.local` and fill in your credentials:
-
-   ```bash
-   cp .env.local.example .env.local
-   ```
-
-   Required variables:
-
-   ```
-   AUTH_SECRET=your-secret-key-here
-   AUTH_GITHUB_ID=your-github-client-id
-   AUTH_GITHUB_SECRET=your-github-client-secret
-   NEXT_PUBLIC_API_URL=http://localhost:3001
-   ```
-
-3. **Run Development Server**:
-
-   ```bash
-   npm run dev
-   ```
-
-4. **Open**: http://localhost:3000
-
-## 🔑 Key Features Implemented
-
-### 1. Refracted Consensus UI
-
-Findings are flagged as "Confirmed" only if 2+ agents agree. The `AnalysisView` component separates findings into:
-
-- **Confirmed Findings**: 2+ agents agree (green badge)
-- **Single Agent Findings**: Only 1 agent identified (yellow badge)
-
-### 2. Single-Page Constraint
-
-The dashboard uses `h-screen overflow-hidden` layout:
-
-- `@/app/(dashboard)/layout.tsx`: `h-screen overflow-hidden flex`
-- `@/components/dashboard/AnalysisView.tsx`: `h-full flex flex-col` with `ScrollArea`
-- No scrolling on the main layout - only content areas scroll
-
-### 3. Agent Debate Log
-
-The `AgentDebateLog` component uses a shadcn/ui Sheet (side drawer) to display:
-
-- Each agent's verdict (Agreed/Disagreed/Uncertain)
-- Confidence scores with visual bars
-- Raw reasoning text from each model
-- Consensus summary (count of each verdict type)
-
-### 4. 3D Hero Prism
-
-The `HeroPrism` component in `@/components/canvas/HeroPrism.tsx`:
-
-- Uses React Three Fiber for WebGL rendering
-- Creates a triangular prism with glass-like material
-- Includes floating particles around the prism
-- Auto-rotating animation with contact shadows
-
-## 🎨 Design System
-
-The project uses a dark theme with CSS variables:
-
-- Background: `hsl(222 47% 4%)` - Deep slate
-- Primary: `hsl(217 91% 60%)` - Blue
-- Card: `hsl(222 47% 6%)` - Slightly lighter than background
-- Border: `hsl(217 33% 17%)` - Subtle borders
-
-## 📝 TypeScript Types
-
-Key interfaces in `@/types/index.ts`:
-
-```typescript
-interface Finding {
-  id: string
-  consensus: boolean // True if 2+ agents agree
-  status: 'Confirmed' | 'Disputed' | 'SingleAgent'
-  agentReasonings: AgentReasoning[] // Raw agent outputs
-}
-
-interface AgentReasoning {
-  agentId: string
-  agentName: string
-  verdict: 'positive' | 'negative' | 'neutral'
-  reasoning: string
-  confidence: number
-}
-```
-
-## 🔐 Privacy
-
-Per requirements, the GitHub provider only scrapes:
-
-- `user.login` (GitHub username)
-- `user.image` (GitHub avatar)
-
-No email or other personal data is collected.
-
-## 📦 Build
+From the repo root (installs both workspaces with a single lockfile):
 
 ```bash
-npm run build
+npm install
 ```
 
-The build will be output to `.next/` directory.
+### Environment variables
 
-## 🧪 Type Checking
+Each app has its own env file:
 
 ```bash
-npm run typecheck
+cp apps/web/.env.local.example apps/web/.env.local
+cp apps/api/.env.example apps/api/.env
 ```
 
-## 🎨 Code Quality
+See each app's README for the required variables.
 
-The project uses **Husky** pre-commit hooks and **lint-staged** to ensure code quality:
+### Run in development
 
-| Command                | Description                    |
-| ---------------------- | ------------------------------ |
-| `npm run lint`         | Run ESLint on all files        |
-| `npm run lint:fix`     | Fix ESLint auto-fixable issues |
-| `npm run format`       | Format all files with Prettier |
-| `npm run format:check` | Check if files are formatted   |
+```bash
+npm run dev:web   # Next.js dev server — http://localhost:3000
+npm run dev:api   # NestJS dev server — http://localhost:3001 (auto-restarts, frees its port)
+```
 
-### Pre-commit Hook
+Run both in separate terminals.
 
-When you commit, Husky automatically runs:
+### Common workspace scripts
 
-1. **ESLint** with `--fix` on staged `.ts/.tsx/.js/.jsx` files
-2. **Prettier** on all staged files
+| Command                                                  | Description                  |
+| -------------------------------------------------------- | ---------------------------- |
+| `npm run build`                                          | Build both apps              |
+| `npm run build:web` / `npm run build:api`                | Build a single app           |
+| `npm run lint` / `npm run lint:web` / `npm run lint:api` | Lint                         |
+| `npm run format` / `npm run format:check`                | Prettier, all/one app        |
+| `npm run typecheck`                                      | `tsc --noEmit` for both apps |
+| `npm run test`                                           | Backend unit tests (Jest)    |
 
-### Configuration
+Pre-commit hooks (Husky + lint-staged) run ESLint and Prettier on staged files, scoped to
+whichever app they belong to.
 
-- **ESLint**: `.eslintrc.json` - extends Next.js + Prettier configs
-- **Prettier**: `.prettierrc` - 2-space indent, single quotes, no semicolons, Tailwind plugin
-- **Husky**: `.husky/pre-commit` - runs `npx lint-staged`
-- **lint-staged**: `package.json` - configured in `lint-staged` key
+## 🚀 Deployment
 
-## 📄 License
+`apps/web` and `apps/api` deploy independently. On Vercel, create one project per app and set its
+**Root Directory** to `apps/web` or `apps/api` respectively — each already has its own
+`next.config.js` / `vercel.json` and build script.
 
-MIT License - see LICENSE file for details.
+## 📝 License
+
+MIT License - see [LICENSE](LICENSE) for details.

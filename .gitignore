@@ -5,6 +5,7 @@ node_modules
 
 # Testing
 coverage
+.nyc_output/
 
 # Next.js
 .next/
@@ -22,10 +23,13 @@ dist
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+lerna-debug.log*
 
 # Local env files
 .env*.local
 .env
+.env.production
+.env.development
 
 # Vercel
 .vercel
@@ -33,3 +37,21 @@ yarn-error.log*
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+# Prisma (apps/api)
+apps/api/prisma/migrations/*/migration_lock.toml
+apps/api/prisma/*.db
+apps/api/prisma/*.db-journal
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Misc
+.cache/
+temp/
+tmp/
+scratch/

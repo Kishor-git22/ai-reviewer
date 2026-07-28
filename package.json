@@ -1,70 +1,47 @@
 {
-  "name": "prism-web",
-  "version": "0.1.0",
+  "name": "prism-monorepo",
+  "version": "1.0.0",
   "private": true,
+  "description": "Prism - AI code review platform. Monorepo containing the Next.js web app (apps/web) and the NestJS API (apps/api).",
+  "license": "MIT",
+  "workspaces": [
+    "apps/*"
+  ],
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
-    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
-    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
-    "typecheck": "tsc --noEmit",
+    "dev:web": "npm run dev --workspace apps/web",
+    "dev:api": "npm run start:dev --workspace apps/api",
+    "build": "npm run build --workspace apps/web && npm run build --workspace apps/api",
+    "build:web": "npm run build --workspace apps/web",
+    "build:api": "npm run build --workspace apps/api",
+    "lint": "npm run lint --workspace apps/web && npm run lint --workspace apps/api",
+    "lint:web": "npm run lint --workspace apps/web",
+    "lint:api": "npm run lint --workspace apps/api",
+    "format": "npm run format --workspace apps/web && npm run format --workspace apps/api",
+    "format:check": "npm run format:check --workspace apps/web && npm run format:check --workspace apps/api",
+    "typecheck": "npm run typecheck --workspace apps/web && npm run typecheck --workspace apps/api",
+    "test": "npm run test --workspace apps/api",
     "prepare": "husky"
   },
-  "dependencies": {
-    "@radix-ui/react-dialog": "^1.0.5",
-    "@radix-ui/react-dropdown-menu": "^2.0.6",
-    "@radix-ui/react-scroll-area": "^1.0.5",
-    "@radix-ui/react-separator": "^1.0.3",
-    "@radix-ui/react-slot": "^1.0.2",
-    "@radix-ui/react-tooltip": "^1.0.7",
-    "@react-three/drei": "^10.7.7",
-    "@react-three/fiber": "^9.6.1",
-    "@tanstack/react-query": "^5.32.0",
-    "class-variance-authority": "^0.7.0",
-    "clsx": "^2.1.1",
-    "lucide-react": "^0.378.0",
-    "next": "^16.2.7",
-    "next-auth": "^5.0.0-beta.31",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
-    "sonner": "^2.0.7",
-    "tailwind-merge": "^2.3.0",
-    "tailwindcss-animate": "^1.0.7",
-    "three": "^0.184.0",
-    "vaul": "^0.9.0",
-    "zod": "^3.23.0"
-  },
   "devDependencies": {
-    "@eslint/eslintrc": "^3.3.5",
-    "@types/node": "^20.12.0",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "@types/three": "^0.184.1",
-    "autoprefixer": "^10.4.19",
-    "eslint": "^9.39.4",
-    "eslint-config-next": "^16.2.7",
-    "eslint-config-prettier": "^9.1.0",
-    "husky": "^9.0.11",
-    "lint-staged": "^15.2.2",
-    "postcss": "^8.5.10",
-    "prettier": "^3.2.5",
-    "prettier-plugin-tailwindcss": "^0.5.14",
-    "tailwindcss": "^3.4.3",
-    "typescript": "^5.4.5"
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.7"
   },
   "lint-staged": {
-    "*.{ts,tsx,js,jsx}": [
-      "eslint --fix",
-      "prettier --write"
+    "apps/web/**/*.{ts,tsx,js,jsx}": [
+      "sh -c 'cd apps/web && npx eslint --fix \"$@\"' --"
     ],
-    "*.{json,css,md}": [
+    "apps/api/**/*.ts": [
+      "sh -c 'cd apps/api && npx eslint --fix \"$@\"' --"
+    ],
+    "**/*.{ts,tsx,js,jsx,json,css,md}": [
       "prettier --write"
     ]
   },
   "overrides": {
-    "postcss": "^8.5.10"
+    "file-type": "latest",
+    "minimatch": "latest",
+    "tar": "latest",
+    "postcss": "^8.5.10",
+    "sharp": "^0.35.3"
   }
 }
