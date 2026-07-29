@@ -84,7 +84,14 @@ export class ReviewerService {
     "deepseek-v4-flash": "deepseek-ai/deepseek-v4-flash",
     "deepseek-v4-pro": "nvidia/nemotron-3-nano-30b-a3b",
     "mistral-medium-3.5": "mistralai/mistral-nemotron",
-    "mistral-small-4": "nvidia/nemotron-mini-4b-instruct",
+    // nemotron-mini-4b-instruct (4B) was tried here first but is too weak
+    // for this task: it repeatedly hallucinated placeholder content
+    // ("path/to/file.ts", fabricated URLs, wrong file paths) instead of
+    // analyzing the actual diff, which silently broke consensus — its
+    // findings could never fuzzy-match a genuine finding from another
+    // agent since it never reported the real file. Swapped for a larger
+    // model that's still fast but noticeably more reliable.
+    "mistral-small-4": "nvidia/nemotron-nano-12b-v2-vl",
     "minimax-m2.7": "meta/llama-3.2-11b-vision-instruct",
     "nemotron-3-super": "nvidia/nemotron-3-super-120b-a12b",
     "llama-3.1": "meta/llama-3.1-70b-instruct",
@@ -259,7 +266,11 @@ export class ReviewerService {
             model,
             promise: async () => {
               try {
-                const response = await this.getAgentReview(model, chunk);
+                const response = await this.getAgentReview(
+                  model,
+                  chunk,
+                  filename,
+                );
                 return { model, status: "success", response };
               } catch (e: any) {
                 this.logger.error(
@@ -340,6 +351,7 @@ export class ReviewerService {
                 const response = await this.getAgentReview(
                   candidateModel,
                   chunk,
+                  filename,
                 );
                 return { model: candidateModel, status: "success", response };
               } catch (e: any) {
@@ -670,7 +682,11 @@ export class ReviewerService {
     }
   }
 
-  private async getAgentReview(modelId: string, diff: string) {
+  private async getAgentReview(
+    modelId: string,
+    diff: string,
+    filename: string,
+  ) {
     const client = this.getClient(modelId);
     const model = this.MODEL_MAPPING[modelId] || modelId;
     const apiKey = this.getModelKey(modelId);
@@ -777,6 +793,19 @@ Return your response in strict JSON format:
       throw new Error(
         `Model ${modelId} returned an empty or unusable response`,
       );
+    }
+
+    // Each call only ever sees one file's diff chunk, so there's no
+    // ambiguity about which file a finding belongs to — never trust the
+    // model's self-reported "file" field. Weaker models routinely
+    // hallucinate it (wrong path, a literal "path/to/file.ts" placeholder,
+    // or text copied from elsewhere in the diff), which silently breaks
+    // consensus: a finding that never reports the real file can never be
+    // fuzzy-matched against another agent's genuine finding on that file.
+    if (hasFindings) {
+      for (const finding of parsed.findings) {
+        finding.file = filename;
+      }
     }
 
     return {
