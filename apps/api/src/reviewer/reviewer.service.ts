@@ -451,8 +451,31 @@ export class ReviewerService {
       );
 
       // 5. Store findings and update analysis
+      //
+      // Don't create a new row (and thus a new duplicate comment) for a
+      // finding that's already tracked as open from a previous commit on
+      // this PR — the same unresolved issue would otherwise get a fresh
+      // comment on every push. Only genuinely new findings get new rows;
+      // still-open ones keep their original comment/thread.
+      const openFindings = await this.prisma.finding.findMany({
+        where: {
+          analysis: { repoName, prNumber },
+          status: { not: "resolved" },
+        },
+      });
+
+      const newFindings = synthesis.findings.filter(
+        (f) => !this.findMatchingFinding(f, openFindings),
+      );
+
+      if (newFindings.length < synthesis.findings.length) {
+        this.logger.log(
+          `${synthesis.findings.length - newFindings.length} finding(s) already tracked as open from a previous commit — skipping duplicate comments.`,
+        );
+      }
+
       const createdFindings = await this.prisma.finding.createManyAndReturn({
-        data: synthesis.findings.map((f) => ({
+        data: newFindings.map((f) => ({
           analysisId: analysis.id,
           file: f.file,
           line: f.line,
@@ -521,7 +544,9 @@ export class ReviewerService {
         }
       } else {
         this.logger.log(
-          "No inline findings match the PR diff files. Posting summary only.",
+          synthesis.findings.length > 0
+            ? "All findings this round are already tracked as open from a previous commit — no new comments to post. Posting summary only."
+            : "No inline findings match the PR diff files. Posting summary only.",
         );
         await this.githubService.postSummaryOnly(
           githubToken,
@@ -534,12 +559,20 @@ export class ReviewerService {
         );
       }
 
-      // 7. Cross-commit comparison for resolved issues
+      // 7. Cross-commit comparison for resolved issues. Compare against
+      // synthesis.findings (the full current judgment: new + still-open),
+      // not createdFindings (only the newly-inserted rows) — otherwise a
+      // still-open, deduped-away finding would look "missing" this round
+      // and get wrongly marked resolved.
+      const reviewedFiles = new Set(
+        reviewableFiles.map(([filename]) => filename),
+      );
       await this.resolveOldFindings(
         owner,
         repoName,
         prNumber,
-        createdFindings,
+        synthesis.findings,
+        reviewedFiles,
         githubToken,
       );
 
@@ -1137,38 +1170,52 @@ IMPORTANT JSON INSTRUCTIONS:
   }
 
   /**
-   * Compares the current findings with findings from the previous analysis
-   * on the same PR. If an old finding is no longer present, mark it resolved.
+   * Fuzzy match used to tell whether two findings represent the same
+   * underlying issue (same file + type, line within 5 — matches the
+   * tolerance buildConsensus() uses, since a fix or unrelated edit can
+   * shift line numbers slightly without changing the issue).
+   */
+  private findMatchingFinding(
+    candidate: { file: string; line: number; type: string },
+    pool: Array<{ file: string; line: number; type: string }>,
+  ) {
+    return pool.find(
+      (f) =>
+        f.file === candidate.file &&
+        f.type === candidate.type &&
+        Math.abs((f.line || 0) - (candidate.line || 0)) <= 5,
+    );
+  }
+
+  /**
+   * Compares this commit's full judgment (new + still-open findings)
+   * against every currently-open finding tracked for this PR. An open
+   * finding only gets marked resolved if its file was actually reviewed
+   * this round and the issue no longer shows up — an untouched file's old
+   * findings are left alone, since silence there means "not reviewed
+   * this time," not "fixed."
    */
   private async resolveOldFindings(
     owner: string,
     repoName: string,
     prNumber: number,
     currentFindings: any[],
+    reviewedFiles: Set<string>,
     githubToken: string,
   ) {
-    // 1. Fetch previous analysis for this PR
-    const analyses = await this.prisma.analysis.findMany({
-      where: { repoName, prNumber },
-      orderBy: { createdAt: "desc" },
-      take: 2, // We want the one right before the current one
-      include: { findings: true },
+    const openFindings = await this.prisma.finding.findMany({
+      where: {
+        analysis: { repoName, prNumber },
+        status: { not: "resolved" },
+      },
     });
 
-    if (analyses.length < 2) return; // No previous analysis to compare with
+    for (const oldFinding of openFindings) {
+      if (!reviewedFiles.has(oldFinding.file)) continue; // not reviewed this round — leave as-is
 
-    const previousAnalysis = analyses[1];
-
-    for (const oldFinding of previousAnalysis.findings) {
-      if (oldFinding.status === "resolved") continue;
-
-      // Check if it exists in the current findings (match by file and similar issue type/rationale snippet)
-      // Since line numbers can shift when code is added/removed above, matching by line exactly is brittle.
-      // We will match by file and issue type.
-      const isStillPresent = currentFindings.some(
-        (newFinding) =>
-          newFinding.file === oldFinding.file &&
-          newFinding.type === oldFinding.type,
+      const isStillPresent = this.findMatchingFinding(
+        oldFinding,
+        currentFindings,
       );
 
       if (!isStillPresent) {
