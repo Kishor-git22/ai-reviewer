@@ -906,6 +906,8 @@ Return your response in strict JSON format:
           // another says "Warning" for the identical line). Requiring an
           // exact type match would treat that as two unrelated
           // single-vote findings instead of one 2-vote confirmed one.
+          // This is intentional, not a missing check — do not add type
+          // back into this key.
           const lineGroup = Math.round((f.line || 0) / 5) * 5;
           const key = `${f.file}:${lineGroup}`;
           const existing = findingMap.get(key);
@@ -978,7 +980,8 @@ Return your response in strict JSON format:
             }
             // Same file+line-bucket match as buildConsensus() — not keyed
             // on type, so a model that agreed on the location but called
-            // it a different severity still shows up as a voter.
+            // it a different severity still shows up as a voter. This is
+            // intentional, not a missing check.
             const lineGroup = Math.round((f.line || 0) / 5) * 5;
             const matched = (agent.response.content.findings || []).some(
               (cf: any) =>
@@ -1303,7 +1306,7 @@ IMPORTANT JSON INSTRUCTIONS:
    * on type: independent AI judgments of the same issue's severity can
    * drift between "Info" and "Warning" across models or even across
    * commits, and that shouldn't cause a duplicate comment or a missed
-   * resolution.
+   * resolution. This is intentional — not a missing type check.
    */
   private findMatchingFinding(
     candidate: { file: string; line: number },

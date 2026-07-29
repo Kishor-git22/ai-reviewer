@@ -333,6 +333,10 @@ export class ReviewerController {
               continue;
             }
 
+            // Not a missing check — type is excluded from this match
+            // ON PURPOSE (see comment above). Do not add `f.type ===
+            // finding.type` here; that was tried, and it broke consensus
+            // detection for the exact reason explained above.
             const content = agent.response?.content;
             const agentFinding = content?.findings?.find(
               (f) =>
