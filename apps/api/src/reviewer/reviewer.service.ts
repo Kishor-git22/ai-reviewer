@@ -71,19 +71,44 @@ export class ReviewerService {
     );
   }
 
-  // Actual NVIDIA NIM model IDs for mapping
+  // Actual NVIDIA NIM model IDs for mapping.
+  //
+  // NOTE: as of 2026-07-29, verified against https://integrate.api.nvidia.com/v1
+  // with this account's keys, several of the originally intended models are
+  // dead: three have been retired by NVIDIA (410 Gone), and three more are
+  // simply not entitled on this account (they hang indefinitely rather than
+  // erroring, regardless of which key is used — confirmed by swapping keys).
+  // Each broken slot below is substituted with a model that IS entitled and
+  // responds reliably in under ~1.5s, so every configured key stays usable.
   private readonly MODEL_MAPPING: Record<string, string> = {
     "deepseek-v4-flash": "deepseek-ai/deepseek-v4-flash",
-    "deepseek-v4-pro": "deepseek-ai/deepseek-v4-pro",
-    "mistral-medium-3.5": "mistralai/mistral-medium-3.5-128b",
-    "mistral-small-4": "mistralai/mistral-small-4-119b-2603",
-    "minimax-m2.7": "minimaxai/minimax-m2.7",
+    "deepseek-v4-pro": "nvidia/nemotron-3-nano-30b-a3b",
+    "mistral-medium-3.5": "mistralai/mistral-nemotron",
+    "mistral-small-4": "nvidia/nemotron-mini-4b-instruct",
+    "minimax-m2.7": "meta/llama-3.2-11b-vision-instruct",
     "nemotron-3-super": "nvidia/nemotron-3-super-120b-a12b",
     "llama-3.1": "meta/llama-3.1-70b-instruct",
-    "gemma-2-27b": "meta/llama-3.3-70b-instruct",
-    "gemma-3": "meta/llama-3.3-70b-instruct", // Alias
-    "phi-4": "microsoft/phi-4-mini-instruct",
+    "gemma-2-27b": "nvidia/nvidia-nemotron-nano-9b-v2",
+    "gemma-3": "nvidia/nvidia-nemotron-nano-9b-v2",
+    "phi-4": "meta/llama-3.2-3b-instruct",
   };
+
+  /**
+   * Priority-ordered pool of internal model keys used to backfill a file's
+   * review when fewer than MIN_SUCCESSES_PER_FILE agents succeed on it.
+   * Ordered fastest-verified-first.
+   */
+  private readonly FALLBACK_PRIORITY: string[] = [
+    "mistral-small-4",
+    "gemma-2-27b",
+    "phi-4",
+    "deepseek-v4-pro",
+    "minimax-m2.7",
+    "mistral-medium-3.5",
+    "nemotron-3-super",
+    "deepseek-v4-flash",
+    "llama-3.1",
+  ];
 
   constructor(
     private readonly prisma: PrismaService,
@@ -99,7 +124,7 @@ export class ReviewerService {
     return new OpenAI({
       baseURL: "https://integrate.api.nvidia.com/v1",
       apiKey,
-      timeout: 300000, // 5 minutes safety net for larger file chunks
+      timeout: 30000, // verified models reply in under ~1.5s; 30s is generous, not a stall
     });
   }
 
@@ -118,7 +143,7 @@ export class ReviewerService {
     selectedModels: string[] = [
       "llama-3.1",
       "deepseek-v4-flash",
-      "mistral-small-4",
+      "nemotron-3-super",
     ],
   ) {
     // 0. Check if an analysis is already in progress for this PR
@@ -260,6 +285,78 @@ export class ReviewerService {
         allResults.push(...batchResults);
       }
 
+      // 3b. Guarantee coverage: if a model fails (bad key, retired model,
+      // rate limit, etc.), a file can be left with 0 or 1 successful
+      // reviews — which also means it can never clear buildConsensus()'s
+      // >=2-vote threshold below. Backfill any under-covered file with
+      // untried models from FALLBACK_PRIORITY so consensus stays possible.
+      const MIN_SUCCESSES_PER_FILE = 2;
+      const MAX_FALLBACK_ATTEMPTS_PER_FILE = 2;
+
+      const attemptedByFile = new Map<string, Set<string>>();
+      const successesByFile = new Map<string, number>();
+      for (const { file, model, result } of allResults) {
+        if (!attemptedByFile.has(file)) attemptedByFile.set(file, new Set());
+        attemptedByFile.get(file)!.add(model);
+        if (result.status === "success") {
+          successesByFile.set(file, (successesByFile.get(file) || 0) + 1);
+        }
+      }
+
+      const fallbackTasks: typeof allTasks = [];
+      for (const [filename, chunk] of reviewableFiles) {
+        if ((successesByFile.get(filename) || 0) >= MIN_SUCCESSES_PER_FILE) {
+          continue;
+        }
+        const attempted = attemptedByFile.get(filename) || new Set<string>();
+        let added = 0;
+        for (const candidateModel of this.FALLBACK_PRIORITY) {
+          if (added >= MAX_FALLBACK_ATTEMPTS_PER_FILE) break;
+          if (attempted.has(candidateModel)) continue;
+          attempted.add(candidateModel);
+          added++;
+          fallbackTasks.push({
+            file: filename,
+            model: candidateModel,
+            promise: async () => {
+              try {
+                const response = await this.getAgentReview(
+                  candidateModel,
+                  chunk,
+                );
+                return { model: candidateModel, status: "success", response };
+              } catch (e: any) {
+                this.logger.error(
+                  `Fallback agent ${candidateModel} failed on ${filename}: ${e.message}`,
+                );
+                return {
+                  model: candidateModel,
+                  status: "failed",
+                  error: e.message,
+                };
+              }
+            },
+          });
+        }
+      }
+
+      if (fallbackTasks.length > 0) {
+        this.logger.log(
+          `${fallbackTasks.length} file(s) had fewer than ${MIN_SUCCESSES_PER_FILE} successful reviews; running fallback agents to guarantee coverage...`,
+        );
+        for (let i = 0; i < fallbackTasks.length; i += CONCURRENCY_LIMIT) {
+          const batch = fallbackTasks.slice(i, i + CONCURRENCY_LIMIT);
+          const batchResults = await Promise.all(
+            batch.map(async (task) => ({
+              file: task.file,
+              model: task.model,
+              result: await task.promise(),
+            })),
+          );
+          allResults.push(...batchResults);
+        }
+      }
+
       // Group results by file for consensus
       const resultsByFile = new Map<
         string,
@@ -270,8 +367,14 @@ export class ReviewerService {
         resultsByFile.get(file)!.push(result);
       }
 
-      // Build flat agentResults array for debateLog (backward compatibility)
-      const agentResults = allResults.map((r) => r.result);
+      // Build flat agentResults array for debateLog. Keeps `file` alongside
+      // each result so the UI can tell which agents actually reviewed a
+      // given finding's file, instead of treating every agent that ran
+      // anywhere in the PR as having an opinion on every finding.
+      const agentResults = allResults.map((r) => ({
+        file: r.file,
+        ...r.result,
+      }));
       const successCount = agentResults.filter(
         (r) => r.status === "success",
       ).length;
@@ -303,8 +406,8 @@ export class ReviewerService {
         `Building consensus (${successCount} successful reviews)... 75%`,
       );
 
-      // 4. Deterministic consensus: vote across agents per file (no LLM call!)
-      const synthesis = this.buildConsensus(resultsByFile);
+      // 4. Deterministic pre-filter: vote across agents per file (fast, no LLM call)
+      const pooledCandidate = this.buildConsensus(resultsByFile);
 
       // Check if stopped before updating database
       checkAnalysis = await this.prisma.analysis.findUnique({
@@ -317,6 +420,26 @@ export class ReviewerService {
         );
         return analysis.id;
       }
+
+      await this.githubService.updateCommitStatus(
+        githubToken,
+        owner,
+        repoName,
+        headSha,
+        "pending",
+        "Cross-checking findings across agents... 85%",
+      );
+
+      // 4b. Cross-model communication: have a judge model read every agent's
+      // findings side by side (who flagged what, and why) and produce the
+      // final, reconciled verdict — dropping false positives, merging
+      // duplicates the fuzzy-match missed, and calling out where the models
+      // agreed or disagreed. One extra call total, not per file, so it stays
+      // fast; falls back to the deterministic result if the judge call fails.
+      const synthesis = await this.synthesizeFindings(
+        pooledCandidate,
+        resultsByFile,
+      );
 
       await this.githubService.updateCommitStatus(
         githubToken,
@@ -351,7 +474,11 @@ export class ReviewerService {
           qualityScore: synthesis.qualityScore,
           securityScore: synthesis.securityScore,
           summary: synthesis.summary,
-          debateLog: { agents: agentResults } as any,
+          debateLog: {
+            agents: agentResults,
+            judgeModel: this.JUDGE_MODEL,
+            judgeApplied: synthesis.judgeApplied,
+          } as any,
         },
       });
 
@@ -505,7 +632,11 @@ Return your response in strict JSON format:
 }`;
 
     let completion;
-    let retries = 2;
+    // One retry only: with a 30s client timeout, a model that's genuinely
+    // unreachable (not entitled, retired) will just time out again on
+    // retry. Cross-model fallback (see FALLBACK_PRIORITY) is what actually
+    // recovers from a dead model — this retry is only for transient blips.
+    let retries = 1;
 
     while (retries >= 0) {
       try {
@@ -524,18 +655,24 @@ Return your response in strict JSON format:
         });
         break;
       } catch (error: any) {
-        const isConnectionError =
+        const isRateLimited = error.status === 429 || error.status === 503;
+        const isRetryable =
+          isRateLimited ||
           error.message?.toLowerCase().includes("connection") ||
           error.message?.toLowerCase().includes("timeout") ||
           error.status === 504 ||
           error.status === 502;
 
-        if (isConnectionError && retries > 0) {
+        if (isRetryable && retries > 0) {
+          // Rate limits (NVIDIA's shared endpoint enforces a per-account
+          // request quota — e.g. "Worker local total request limit
+          // reached") need a longer backoff than a plain connection blip.
+          const backoffMs = isRateLimited ? 4000 : 1000;
           this.logger.warn(
-            `Agent review for ${modelId} failed (${error.message}), retrying... (${retries} left)`,
+            `Agent review for ${modelId} failed (${error.message}), retrying in ${backoffMs}ms... (${retries} left)`,
           );
           retries--;
-          await new Promise((resolve) => setTimeout(resolve, 2000));
+          await new Promise((resolve) => setTimeout(resolve, backoffMs));
           continue;
         }
         throw error;
@@ -646,6 +783,127 @@ Return your response in strict JSON format:
       securityScore: Math.round(securityTotal / (agentCount || 1)),
       summary: `Consensus from ${agentCount} agent reviews across ${fileCount} files. ${findings.length} issues confirmed by multi-agent agreement.`,
     };
+  }
+
+  /** Model used to synthesize the final verdict from all agents' findings. */
+  private readonly JUDGE_MODEL = "nemotron-3-super";
+
+  /**
+   * Cross-model communication step: shows a judge model every candidate
+   * finding side by side with which agent(s) raised it, and asks it to
+   * reconcile them into one final verdict — dropping false positives,
+   * merging duplicates the deterministic fuzzy-match missed, and explaining
+   * where the agents agreed or disagreed. This is the one place agents'
+   * outputs actually inform each other, rather than being pooled by a
+   * fixed vote-count rule.
+   *
+   * Always falls back to the deterministic `candidate` result on any
+   * failure (bad JSON, timeout, judge model down) so a flaky judge call
+   * never breaks or blocks the review.
+   */
+  private async synthesizeFindings(
+    candidate: AIReviewResult,
+    resultsByFile: Map<
+      string,
+      Array<{ model: string; status: string; response?: any; error?: string }>
+    >,
+  ): Promise<AIReviewResult & { judgeApplied: boolean }> {
+    if (candidate.findings.length === 0) {
+      // Nothing to reconcile — skip the extra call entirely to stay fast.
+      return { ...candidate, judgeApplied: false };
+    }
+
+    const digest = candidate.findings
+      .map((f, i) => {
+        const voters = new Set<string>();
+        for (const [, agentResults] of resultsByFile) {
+          for (const agent of agentResults) {
+            if (agent.status !== "success" || !agent.response?.content) {
+              continue;
+            }
+            const lineGroup = Math.round((f.line || 0) / 5) * 5;
+            const matched = (agent.response.content.findings || []).some(
+              (cf: any) =>
+                cf.file === f.file &&
+                Math.round((cf.line || 0) / 5) * 5 === lineGroup &&
+                cf.type === f.type,
+            );
+            if (matched) voters.add(agent.model);
+          }
+        }
+        return (
+          `${i + 1}. [${f.file}:${f.line}] ${f.type} (flagged by: ${Array.from(voters).join(", ") || "unknown"})\n` +
+          `   Issue: ${f.issue}\n` +
+          `   Rationale: ${(f.rationale || "").substring(0, 300)}`
+        );
+      })
+      .join("\n\n");
+
+    const prompt = `You are the final judge on a multi-agent AI code review panel. Several independent reviewer models analyzed a pull request and produced the candidate findings below, each annotated with which model(s) raised it.
+
+Cross-check these findings against each other. Drop anything that looks like a false positive, a near-duplicate, or is too speculative to act on. Where reviewers disagree, or one model caught something the others missed, briefly say so in the summary.
+
+CANDIDATE FINDINGS:
+${digest}
+
+IMPORTANT JSON INSTRUCTIONS:
+1. Output ONLY valid JSON, no markdown code blocks.
+2. Use exactly the schema below.
+3. "reference" must be a real, valid URL.
+
+{
+  "findings": [
+    { "file": "string", "line": number, "issue": "string", "type": "Critical|Vulnerability|Warning|Info", "confidence": "High|Medium|Low", "rationale": "string", "resolution": "string", "reference": "URL" }
+  ],
+  "qualityScore": number (0-100),
+  "securityScore": number (0-100),
+  "summary": "string — mention where the reviewer models agreed or disagreed"
+}`;
+
+    try {
+      const client = this.getClient(this.JUDGE_MODEL);
+      const model = this.MODEL_MAPPING[this.JUDGE_MODEL] || this.JUDGE_MODEL;
+
+      const completion = await client.chat.completions.create({
+        model,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are an AI judge that outputs ONLY raw JSON, reconciling multiple code reviewers' findings into one final verdict. Never include markdown or explanations outside the JSON.",
+          },
+          { role: "user", content: prompt },
+        ],
+        max_tokens: 3000,
+        temperature: 0.1,
+      });
+
+      const content = completion.choices[0].message.content || "{}";
+      const parsed = this.safeJsonParse(this.extractJsonBlock(content));
+
+      if (!Array.isArray(parsed.findings)) {
+        throw new Error("Judge response was missing a findings array");
+      }
+
+      return {
+        findings: parsed.findings,
+        qualityScore:
+          typeof parsed.qualityScore === "number"
+            ? parsed.qualityScore
+            : candidate.qualityScore,
+        securityScore:
+          typeof parsed.securityScore === "number"
+            ? parsed.securityScore
+            : candidate.securityScore,
+        summary: parsed.summary || candidate.summary,
+        judgeApplied: true,
+      };
+    } catch (e: any) {
+      this.logger.warn(
+        `Judge synthesis failed (${e.message}), falling back to deterministic consensus.`,
+      );
+      return { ...candidate, judgeApplied: false };
+    }
   }
 
   /**

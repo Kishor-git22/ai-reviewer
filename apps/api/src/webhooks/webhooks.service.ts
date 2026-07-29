@@ -133,15 +133,32 @@ export class WebhooksService {
     }
   }
 
+  /** Actions that represent an actual code change worth re-reviewing. */
+  private readonly REVIEWABLE_ACTIONS = ["opened", "synchronize", "reopened"];
+
   /**
    * Handle incoming GitHub webhooks
    */
-  async handleGithubWebhook(payload: any) {
+  async handleGithubWebhook(payload: any, githubEvent?: string) {
     const event = payload.action;
     const pr = payload.pull_request;
     const repo = payload.repository;
 
     if (!pr || !repo) return;
+
+    // The webhook is subscribed to pull_request, pull_request_review, and
+    // pull_request_review_comment — but review/comment payloads ALSO carry
+    // a `pull_request` object, so without this check every AI-posted review
+    // (itself a "pull_request_review" submission) re-triggers this handler,
+    // which posts another review, which re-triggers again — an infinite
+    // self-feedback loop. Only genuine `pull_request` events should ever
+    // start a new analysis.
+    if (githubEvent && githubEvent !== "pull_request") {
+      this.logger.log(
+        `Ignoring non-pull_request webhook event: ${githubEvent} (action: ${event})`,
+      );
+      return { status: "ignored", reason: "not a pull_request event" };
+    }
 
     // Handle PR closed event to stop active reviews
     if (event === "closed") {
@@ -191,11 +208,16 @@ export class WebhooksService {
       return { status: "stopped" };
     }
 
-    // The user requested to run AI analysis for EVERY pull request event.
-    // We log the specific event type for debugging purposes.
-    this.logger.log(
-      `Received PR event: ${event}. Proceeding with analysis as requested.`,
-    );
+    // Only re-review on actions that represent an actual code change.
+    // Other pull_request actions (assigned, labeled, review_requested,
+    // edited, etc.) don't change the diff and shouldn't trigger a fresh,
+    // expensive multi-agent analysis.
+    if (!this.REVIEWABLE_ACTIONS.includes(event)) {
+      this.logger.log(`Ignoring non-reviewable pull_request action: ${event}`);
+      return { status: "ignored", reason: "action does not change code" };
+    }
+
+    this.logger.log(`Received PR event: ${event}. Proceeding with analysis.`);
 
     this.logger.log(
       `Processing automatic review for ${repo.full_name} PR #${pr.number}`,

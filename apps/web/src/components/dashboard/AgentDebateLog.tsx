@@ -155,27 +155,6 @@ export function AgentDebateLog({ finding, children }: AgentDebateLogProps) {
                   <div className="rounded-md bg-muted/50 p-3">
                     <p className="text-sm leading-relaxed text-foreground">{reasoning.reasoning}</p>
                   </div>
-
-                  {/* Confidence Bar */}
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">Confidence Score</span>
-                      <span className="font-medium">{Math.round(reasoning.confidence * 100)}%</span>
-                    </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className={cn(
-                          'h-full rounded-full transition-all',
-                          reasoning.confidence > 0.8
-                            ? 'bg-green-500'
-                            : reasoning.confidence > 0.5
-                              ? 'bg-yellow-500'
-                              : 'bg-red-500'
-                        )}
-                        style={{ width: `${reasoning.confidence * 100}%` }}
-                      />
-                    </div>
-                  </div>
                 </div>
               ))}
             </div>
@@ -185,8 +164,5 @@ export function AgentDebateLog({ finding, children }: AgentDebateLogProps) {
     </Sheet>
   )
 }
-
-// Utility for cn
-import { cn } from '@/lib/utils'
 
 export default AgentDebateLog
