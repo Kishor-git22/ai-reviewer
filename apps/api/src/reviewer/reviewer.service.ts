@@ -570,11 +570,28 @@ export class ReviewerService {
           );
         }
       } else {
+        // Distinguish *why* there's nothing to post inline — these read
+        // very differently to a user: "nothing wrong" vs "already flagged
+        // last commit" vs "the model hallucinated a file that isn't in
+        // this diff" are not the same situation and shouldn't share one
+        // generic message.
+        const reason: "none" | "already-tracked" | "invalid-paths" =
+          synthesis.findings.length === 0
+            ? "none"
+            : createdFindings.length === 0
+              ? "already-tracked"
+              : "invalid-paths";
+
         this.logger.log(
-          synthesis.findings.length > 0
-            ? "All findings this round are already tracked as open from a previous commit — no new comments to post. Posting summary only."
-            : "No inline findings match the PR diff files. Posting summary only.",
+          {
+            none: "No issues found. Posting summary only.",
+            "already-tracked":
+              "All findings this round are already tracked as open from a previous commit — no new comments to post. Posting summary only.",
+            "invalid-paths":
+              "New findings referenced files outside the current diff — withholding inline comments. Posting summary only.",
+          }[reason],
         );
+
         await this.githubService.postSummaryOnly(
           githubToken,
           owner,
@@ -583,6 +600,7 @@ export class ReviewerService {
           synthesis.findings.length,
           synthesis.qualityScore,
           synthesis.securityScore,
+          reason,
         );
       }
 
@@ -741,10 +759,29 @@ Return your response in strict JSON format:
 
     const content = completion.choices[0].message.content || "{}";
     const cleanContent = this.extractJsonBlock(content);
+    const parsed = this.safeJsonParse(cleanContent);
+
+    // A model can return a technically-successful HTTP response with an
+    // empty completion (content: "" -> defaults to "{}" above), which
+    // parses fine but carries no real signal — no findings array, no
+    // scores. Treating that as a genuine "success" would silently drag
+    // down averaged scores (0 gets substituted for a missing score) and
+    // count as a real vote of confidence it never actually gave. Throwing
+    // here makes the caller correctly record it as a failure, which is
+    // what triggers seeking a real replacement opinion via fallback.
+    const hasFindings = Array.isArray(parsed?.findings);
+    const hasScores =
+      typeof parsed?.qualityScore === "number" ||
+      typeof parsed?.securityScore === "number";
+    if (!hasFindings && !hasScores) {
+      throw new Error(
+        `Model ${modelId} returned an empty or unusable response`,
+      );
+    }
 
     return {
       model: modelId,
-      content: this.safeJsonParse(cleanContent),
+      content: parsed,
     };
   }
 
@@ -797,7 +834,9 @@ Return your response in strict JSON format:
   ): AIReviewResult {
     const findingMap = new Map<string, { finding: any; votes: number }>();
     let qualityTotal = 0;
+    let qualityCount = 0;
     let securityTotal = 0;
+    let securityCount = 0;
     let agentCount = 0;
 
     for (const [, agentResults] of resultsByFile) {
@@ -805,8 +844,17 @@ Return your response in strict JSON format:
         if (agent.status !== "success" || !agent.response?.content) continue;
         const content = agent.response.content;
 
-        qualityTotal += content.qualityScore || 0;
-        securityTotal += content.securityScore || 0;
+        // Only average over agents that actually reported a score — a
+        // missing score should never silently count as a 0 and drag the
+        // average down.
+        if (typeof content.qualityScore === "number") {
+          qualityTotal += content.qualityScore;
+          qualityCount++;
+        }
+        if (typeof content.securityScore === "number") {
+          securityTotal += content.securityScore;
+          securityCount++;
+        }
         agentCount++;
 
         for (const f of content.findings || []) {
@@ -839,8 +887,8 @@ Return your response in strict JSON format:
 
     return {
       findings,
-      qualityScore: Math.round(qualityTotal / (agentCount || 1)),
-      securityScore: Math.round(securityTotal / (agentCount || 1)),
+      qualityScore: Math.round(qualityTotal / (qualityCount || 1)),
+      securityScore: Math.round(securityTotal / (securityCount || 1)),
       summary: `Consensus from ${agentCount} agent reviews across ${fileCount} files. ${findings.length} issues confirmed by multi-agent agreement.`,
     };
   }
