@@ -288,14 +288,15 @@ export class ReviewerController {
       const debateLog: any = analysis.debateLog;
       if (debateLog.agents && Array.isArray(debateLog.agents)) {
         analysis.findings = analysis.findings.map((finding) => {
-          // Only consider agents that actually reviewed this finding's file
-          // (debateLog.agents has one entry per (file x model) task run
-          // across the whole PR, so most entries are irrelevant to any
-          // given finding). Also drop failed calls — a model that errored
-          // out never formed an opinion, positive or negative.
+          // Only consider agents that were actually attempted on this
+          // finding's file (debateLog.agents has one entry per (file x
+          // model) task run across the whole PR, so most entries are
+          // irrelevant to any given finding). Failed attempts are kept —
+          // a selected model that errored out (rate limit, timeout) should
+          // show as "didn't respond", not silently disappear as if it was
+          // never part of the review.
           const relevantAgents = debateLog.agents.filter(
-            (agent) =>
-              agent.file === finding.file && agent.status === "success",
+            (agent) => agent.file === finding.file,
           );
 
           // The same model can still appear more than once for this file if
@@ -303,14 +304,41 @@ export class ReviewerController {
           // reasoning per unique model, preferring a positive verdict.
           const byModel = new Map<string, any>();
 
-          for (const agent of relevantAgents) {
-            const content = agent.response?.content;
-            const agentFinding = content?.findings?.find(
-              (f) => f.file === finding.file && f.line === finding.line,
-            );
+          // Same fuzzy match buildConsensus() used to group votes at write
+          // time (nearest-5 line bucket + type) — an exact line match here
+          // would miss agents whose reported line was a few lines off from
+          // the stored representative finding, making a genuinely
+          // multi-agent finding look single-agent.
+          const findingLineGroup = Math.round((finding.line || 0) / 5) * 5;
 
+          for (const agent of relevantAgents) {
             const existing = byModel.get(agent.model);
             if (existing?.verdict === "positive") continue; // already confirmed positive
+
+            if (agent.status !== "success") {
+              // Never overwrite a real verdict from a different attempt of
+              // the same model with a failure from another attempt.
+              if (!existing) {
+                byModel.set(agent.model, {
+                  agentId: agent.model,
+                  agentName: agent.model,
+                  verdict: "neutral",
+                  reasoning: agent.error
+                    ? `This agent did not respond: ${agent.error}`
+                    : "This agent did not respond.",
+                  confidence: 0,
+                });
+              }
+              continue;
+            }
+
+            const content = agent.response?.content;
+            const agentFinding = content?.findings?.find(
+              (f) =>
+                f.file === finding.file &&
+                Math.round((f.line || 0) / 5) * 5 === findingLineGroup &&
+                f.type === finding.type,
+            );
 
             if (agentFinding) {
               byModel.set(agent.model, {
@@ -328,7 +356,7 @@ export class ReviewerController {
                       ? 0.6
                       : 0.3,
               });
-            } else if (!existing) {
+            } else if (!existing || existing.verdict === "neutral") {
               // No fabricated constant: use this agent's own reported scores
               // for the file as its "confidence nothing's wrong here" —
               // varies per model/file instead of a flat placeholder.
@@ -363,6 +391,13 @@ export class ReviewerController {
               1,
           };
         });
+
+        // Only ever surface findings backed by 2+ agreeing agents. This
+        // should already hold from buildConsensus()'s write-time vote
+        // threshold, but the judge synthesis step (or the fuzzy-vs-exact
+        // matching above) can still leave a straggler — never display a
+        // single-agent finding as if it were reviewed by the panel.
+        analysis.findings = analysis.findings.filter((f) => f.consensus);
       }
     }
     return analysis;

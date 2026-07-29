@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Body,
+  Headers,
   UseGuards,
   Request,
   Param,
@@ -17,8 +18,11 @@ export class WebhooksController {
    * Endpoint for GitHub to send webhooks to
    */
   @Post("github")
-  async handleGithubWebhook(@Body() payload: any) {
-    return this.webhooksService.handleGithubWebhook(payload);
+  async handleGithubWebhook(
+    @Body() payload: any,
+    @Headers("x-github-event") githubEvent: string,
+  ) {
+    return this.webhooksService.handleGithubWebhook(payload, githubEvent);
   }
 
   /**
