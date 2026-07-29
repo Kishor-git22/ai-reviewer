@@ -204,8 +204,8 @@ export default function DashboardPage() {
   const { data: userSettings } = useUserSettings()
   const selectedModels = userSettings?.selectedModels || [
     'llama-3.1',
-    'deepseek-v4-pro',
-    'mistral-medium-3.5',
+    'deepseek-v4-flash',
+    'nemotron-3-super',
   ]
 
   const [showModelSelection, setShowModelSelection] = useState(false)
