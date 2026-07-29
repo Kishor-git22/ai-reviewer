@@ -305,10 +305,11 @@ export class ReviewerController {
           const byModel = new Map<string, any>();
 
           // Same fuzzy match buildConsensus() used to group votes at write
-          // time (nearest-5 line bucket + type) — an exact line match here
-          // would miss agents whose reported line was a few lines off from
-          // the stored representative finding, making a genuinely
-          // multi-agent finding look single-agent.
+          // time (nearest-5 line bucket, not keyed on type) — an exact
+          // line+type match here would miss agents whose reported line was
+          // a few lines off, or who agreed on the location but called it a
+          // different severity, making a genuinely multi-agent finding
+          // look single-agent.
           const findingLineGroup = Math.round((finding.line || 0) / 5) * 5;
 
           for (const agent of relevantAgents) {
@@ -336,8 +337,7 @@ export class ReviewerController {
             const agentFinding = content?.findings?.find(
               (f) =>
                 f.file === finding.file &&
-                Math.round((f.line || 0) / 5) * 5 === findingLineGroup &&
-                f.type === finding.type,
+                Math.round((f.line || 0) / 5) * 5 === findingLineGroup,
             );
 
             if (agentFinding) {

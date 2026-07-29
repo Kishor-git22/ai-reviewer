@@ -704,7 +704,17 @@ export class ReviewerService {
         : diff;
 
     const prompt = `You are a strict, robotic Code Review Agent.
-Analyze the following CODE DIFF for security vulnerabilities, performance bottlenecks, and code quality issues.
+Analyze the following CODE DIFF and report every issue you find in these categories:
+- Security vulnerabilities (injection, auth/authz bypass, exposed secrets or credentials, unsafe deserialization, SSRF, path traversal, insecure defaults, etc.)
+- Bugs (logic errors, incorrect conditionals, off-by-one errors, race conditions, unhandled edge cases, null/undefined handling, resource leaks)
+- Performance bottlenecks (unnecessary loops/re-renders, N+1 queries, blocking calls, unbounded memory/growth)
+- Code quality and maintainability issues (dead code, duplicated logic, unclear naming, missing error handling, violations of the language/framework's conventions)
+
+Classify each finding's "type" using this scale, and hold every finding to it consistently:
+- "Critical": would break functionality, crash, corrupt data, or cause a severe outage if merged as-is.
+- "Vulnerability": a real, exploitable security weakness (this is specifically for security issues, not general bugs).
+- "Warning": a genuine bug, performance problem, or quality issue that should be fixed but isn't immediately breaking.
+- "Info": a minor suggestion, style nit, or informational observation with no functional impact.
 
 CODE DIFF:
 ${safeDiff}
@@ -887,9 +897,14 @@ Return your response in strict JSON format:
         agentCount++;
 
         for (const f of content.findings || []) {
-          // Fuzzy key: same file + nearby line (±5) + same type
+          // Fuzzy key: same file + nearby line (±5). Deliberately NOT
+          // keyed on type — models routinely agree on *where* an issue is
+          // while disagreeing on its severity label (one says "Info",
+          // another says "Warning" for the identical line). Requiring an
+          // exact type match would treat that as two unrelated
+          // single-vote findings instead of one 2-vote confirmed one.
           const lineGroup = Math.round((f.line || 0) / 5) * 5;
-          const key = `${f.file}:${lineGroup}:${f.type}`;
+          const key = `${f.file}:${lineGroup}`;
           const existing = findingMap.get(key);
           if (existing) {
             existing.votes++;
@@ -958,12 +973,14 @@ Return your response in strict JSON format:
             if (agent.status !== "success" || !agent.response?.content) {
               continue;
             }
+            // Same file+line-bucket match as buildConsensus() — not keyed
+            // on type, so a model that agreed on the location but called
+            // it a different severity still shows up as a voter.
             const lineGroup = Math.round((f.line || 0) / 5) * 5;
             const matched = (agent.response.content.findings || []).some(
               (cf: any) =>
                 cf.file === f.file &&
-                Math.round((cf.line || 0) / 5) * 5 === lineGroup &&
-                cf.type === f.type,
+                Math.round((cf.line || 0) / 5) * 5 === lineGroup,
             );
             if (matched) voters.add(agent.model);
           }
@@ -1275,18 +1292,21 @@ IMPORTANT JSON INSTRUCTIONS:
 
   /**
    * Fuzzy match used to tell whether two findings represent the same
-   * underlying issue (same file + type, line within 5 — matches the
-   * tolerance buildConsensus() uses, since a fix or unrelated edit can
-   * shift line numbers slightly without changing the issue).
+   * underlying issue (same file, line within 5 — matches the tolerance
+   * buildConsensus() uses, since a fix or unrelated edit can shift line
+   * numbers slightly without changing the issue). Deliberately not keyed
+   * on type: independent AI judgments of the same issue's severity can
+   * drift between "Info" and "Warning" across models or even across
+   * commits, and that shouldn't cause a duplicate comment or a missed
+   * resolution.
    */
   private findMatchingFinding(
-    candidate: { file: string; line: number; type: string },
-    pool: Array<{ file: string; line: number; type: string }>,
+    candidate: { file: string; line: number },
+    pool: Array<{ file: string; line: number }>,
   ) {
     return pool.find(
       (f) =>
         f.file === candidate.file &&
-        f.type === candidate.type &&
         Math.abs((f.line || 0) - (candidate.line || 0)) <= 5,
     );
   }
