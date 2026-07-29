@@ -228,8 +228,19 @@ export class ReviewerService {
 
       // 3. Run all agents across all file chunks in parallel
       //    Concurrency: (reviewableFiles × models) requests fire simultaneously
-      //    Rate-limit guard: batch in groups of 10 concurrent requests
+      //    Rate-limit guard: batch in groups of concurrent requests
       const CONCURRENCY_LIMIT = 10;
+      // Hard ceiling on how long the whole agent-calling phase (initial +
+      // fallback batches) is allowed to run. Without this, a large PR or a
+      // sustained rate-limit storm has no upper bound — each task can take
+      // up to ~65s (30s timeout + 1 retry), so a handful of unlucky batches
+      // could otherwise stretch a review to many minutes. Once the deadline
+      // passes, remaining batches are skipped and the review proceeds with
+      // whatever was gathered so far rather than keep waiting.
+      const analysisStartedAt = Date.now();
+      const AGENT_PHASE_DEADLINE_MS = 90_000;
+      const deadlineExceeded = () =>
+        Date.now() - analysisStartedAt > AGENT_PHASE_DEADLINE_MS;
       const allTasks: Array<{
         file: string;
         model: string;
@@ -274,6 +285,12 @@ export class ReviewerService {
       }> = [];
 
       for (let i = 0; i < allTasks.length; i += CONCURRENCY_LIMIT) {
+        if (deadlineExceeded()) {
+          this.logger.warn(
+            `Agent phase deadline (${AGENT_PHASE_DEADLINE_MS}ms) reached; skipping remaining ${allTasks.length - i} initial task(s) to keep the review fast.`,
+          );
+          break;
+        }
         const batch = allTasks.slice(i, i + CONCURRENCY_LIMIT);
         const batchResults = await Promise.all(
           batch.map(async (task) => ({
@@ -340,11 +357,21 @@ export class ReviewerService {
         }
       }
 
-      if (fallbackTasks.length > 0) {
+      if (fallbackTasks.length > 0 && deadlineExceeded()) {
+        this.logger.warn(
+          `Agent phase deadline already reached; skipping ${fallbackTasks.length} fallback task(s) to keep the review fast.`,
+        );
+      } else if (fallbackTasks.length > 0) {
         this.logger.log(
           `${fallbackTasks.length} file(s) had fewer than ${MIN_SUCCESSES_PER_FILE} successful reviews; running fallback agents to guarantee coverage...`,
         );
         for (let i = 0; i < fallbackTasks.length; i += CONCURRENCY_LIMIT) {
+          if (deadlineExceeded()) {
+            this.logger.warn(
+              `Agent phase deadline reached; skipping remaining ${fallbackTasks.length - i} fallback task(s).`,
+            );
+            break;
+          }
           const batch = fallbackTasks.slice(i, i + CONCURRENCY_LIMIT);
           const batchResults = await Promise.all(
             batch.map(async (task) => ({
