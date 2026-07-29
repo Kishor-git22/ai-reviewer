@@ -367,8 +367,14 @@ export class ReviewerService {
         resultsByFile.get(file)!.push(result);
       }
 
-      // Build flat agentResults array for debateLog (backward compatibility)
-      const agentResults = allResults.map((r) => r.result);
+      // Build flat agentResults array for debateLog. Keeps `file` alongside
+      // each result so the UI can tell which agents actually reviewed a
+      // given finding's file, instead of treating every agent that ran
+      // anywhere in the PR as having an opinion on every finding.
+      const agentResults = allResults.map((r) => ({
+        file: r.file,
+        ...r.result,
+      }));
       const successCount = agentResults.filter(
         (r) => r.status === "success",
       ).length;

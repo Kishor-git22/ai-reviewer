@@ -288,13 +288,32 @@ export class ReviewerController {
       const debateLog: any = analysis.debateLog;
       if (debateLog.agents && Array.isArray(debateLog.agents)) {
         analysis.findings = analysis.findings.map((finding) => {
-          const agentReasonings = debateLog.agents.map((agent) => {
-            const agentFinding = agent.response?.content?.findings?.find(
+          // Only consider agents that actually reviewed this finding's file
+          // (debateLog.agents has one entry per (file x model) task run
+          // across the whole PR, so most entries are irrelevant to any
+          // given finding). Also drop failed calls — a model that errored
+          // out never formed an opinion, positive or negative.
+          const relevantAgents = debateLog.agents.filter(
+            (agent) =>
+              agent.file === finding.file && agent.status === "success",
+          );
+
+          // The same model can still appear more than once for this file if
+          // it was retried as its own fallback pick elsewhere; dedupe to one
+          // reasoning per unique model, preferring a positive verdict.
+          const byModel = new Map<string, any>();
+
+          for (const agent of relevantAgents) {
+            const content = agent.response?.content;
+            const agentFinding = content?.findings?.find(
               (f) => f.file === finding.file && f.line === finding.line,
             );
 
+            const existing = byModel.get(agent.model);
+            if (existing?.verdict === "positive") continue; // already confirmed positive
+
             if (agentFinding) {
-              return {
+              byModel.set(agent.model, {
                 agentId: agent.model,
                 agentName: agent.model,
                 verdict: "positive",
@@ -308,18 +327,33 @@ export class ReviewerController {
                     : agentFinding.confidence === "Medium"
                       ? 0.6
                       : 0.3,
-              };
-            } else {
-              return {
+              });
+            } else if (!existing) {
+              // No fabricated constant: use this agent's own reported scores
+              // for the file as its "confidence nothing's wrong here" —
+              // varies per model/file instead of a flat placeholder.
+              const quality = content?.qualityScore;
+              const security = content?.securityScore;
+              const scores = [quality, security].filter(
+                (s) => typeof s === "number",
+              );
+              const derivedConfidence =
+                scores.length > 0
+                  ? scores.reduce((a, b) => a + b, 0) / scores.length / 100
+                  : 0.5;
+
+              byModel.set(agent.model, {
                 agentId: agent.model,
                 agentName: agent.model,
                 verdict: "negative",
                 reasoning:
                   "The agent did not flag any issue on this specific line.",
-                confidence: 0.8,
-              };
+                confidence: derivedConfidence,
+              });
             }
-          });
+          }
+
+          const agentReasonings = Array.from(byModel.values());
 
           return {
             ...finding,
