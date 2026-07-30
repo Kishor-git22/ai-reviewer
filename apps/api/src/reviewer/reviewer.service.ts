@@ -865,8 +865,10 @@ Return your response in strict JSON format:
 
   /**
    * Deterministic consensus builder. Replaces the expensive LLM synthesis call.
-   * Votes across agents: only includes findings confirmed by ≥2 agents.
-   * Uses fuzzy matching (same file + nearby line ±5 + same type) for dedup.
+   * Votes across agents: only includes findings confirmed by ≥2 DIFFERENT
+   * agents. Uses fuzzy matching (same file + line within ±5) for dedup —
+   * deliberately not keyed on type, since models routinely agree on
+   * *where* an issue is while disagreeing on its severity label.
    */
   private buildConsensus(
     resultsByFile: Map<
@@ -874,7 +876,12 @@ Return your response in strict JSON format:
       Array<{ model: string; status: string; response?: any; error?: string }>
     >,
   ): AIReviewResult {
-    const findingMap = new Map<string, { finding: any; votes: number }>();
+    const groups: Array<{
+      file: string;
+      line: number;
+      finding: any;
+      votedBy: Set<string>;
+    }> = [];
     let qualityTotal = 0;
     let qualityCount = 0;
     let securityTotal = 0;
@@ -899,21 +906,27 @@ Return your response in strict JSON format:
         }
         agentCount++;
 
+        // A single model can report several distinct findings at the same
+        // line (e.g. a vulnerability AND a warning AND a style nit all on
+        // one line) — each of those must count as at most ONE vote from
+        // this agent per group (votedBy is a Set, so adding the same model
+        // twice is a no-op), or one model's own multiple findings can
+        // self-inflate past the 2-agent threshold with zero real
+        // corroboration from anyone else.
         for (const f of content.findings || []) {
-          // Fuzzy key: same file + nearby line (±5). Deliberately NOT
-          // keyed on type — models routinely agree on *where* an issue is
-          // while disagreeing on its severity label (one says "Info",
-          // another says "Warning" for the identical line). Requiring an
-          // exact type match would treat that as two unrelated
-          // single-vote findings instead of one 2-vote confirmed one.
-          // This is intentional, not a missing check — do not add type
-          // back into this key.
-          const lineGroup = Math.round((f.line || 0) / 5) * 5;
-          const key = `${f.file}:${lineGroup}`;
-          const existing = findingMap.get(key);
+          const line = f.line || 0;
+          // Direct distance check (±5), not a shared rounding bucket — a
+          // bucket like Math.round(line/5)*5 can put two lines that are
+          // genuinely within 5 of each other into different buckets right
+          // at the boundary (e.g. 333 -> 335, 338 -> 340), silently
+          // missing a real match.
+          const existing = groups.find(
+            (g) => g.file === f.file && Math.abs(g.line - line) <= 5,
+          );
+
           if (existing) {
-            existing.votes++;
-            // Keep the finding with the longest rationale (most detailed)
+            existing.votedBy.add(agent.model);
+            // Keep the finding with the longest rationale (most detailed).
             if (
               f.rationale &&
               f.rationale.length > (existing.finding.rationale?.length || 0)
@@ -921,15 +934,20 @@ Return your response in strict JSON format:
               existing.finding = f;
             }
           } else {
-            findingMap.set(key, { finding: f, votes: 1 });
+            groups.push({
+              file: f.file,
+              line,
+              finding: f,
+              votedBy: new Set([agent.model]),
+            });
           }
         }
       }
     }
 
-    // Only include findings with ≥2 agent agreement
-    const findings = Array.from(findingMap.values())
-      .filter((entry) => entry.votes >= 2)
+    // Only include findings with ≥2 DIFFERENT agents agreeing
+    const findings = groups
+      .filter((entry) => entry.votedBy.size >= 2)
       .map((entry) => entry.finding);
 
     const fileCount = resultsByFile.size;
@@ -978,15 +996,18 @@ Return your response in strict JSON format:
             if (agent.status !== "success" || !agent.response?.content) {
               continue;
             }
-            // Same file+line-bucket match as buildConsensus() — not keyed
+            // Same file+±5-distance match as buildConsensus() — not keyed
             // on type, so a model that agreed on the location but called
             // it a different severity still shows up as a voter. This is
-            // intentional, not a missing check.
-            const lineGroup = Math.round((f.line || 0) / 5) * 5;
+            // intentional, not a missing check. Must stay a direct distance
+            // check rather than a shared rounding bucket: bucketing lines
+            // that are genuinely within 5 of each other (e.g. 333 and 338)
+            // can land them in different buckets (335 vs 340), silently
+            // dropping a real voter from the judge's summary.
             const matched = (agent.response.content.findings || []).some(
               (cf: any) =>
                 cf.file === f.file &&
-                Math.round((cf.line || 0) / 5) * 5 === lineGroup,
+                Math.abs((cf.line || 0) - (f.line || 0)) <= 5,
             );
             if (matched) voters.add(agent.model);
           }

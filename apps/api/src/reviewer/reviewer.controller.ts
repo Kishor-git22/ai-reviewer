@@ -304,14 +304,14 @@ export class ReviewerController {
           // reasoning per unique model, preferring a positive verdict.
           const byModel = new Map<string, any>();
 
-          // Same fuzzy match buildConsensus() used to group votes at write
-          // time (nearest-5 line bucket, not keyed on type) — an exact
-          // line+type match here would miss agents whose reported line was
-          // a few lines off, or who agreed on the location but called it a
-          // different severity, making a genuinely multi-agent finding
-          // look single-agent.
-          const findingLineGroup = Math.round((finding.line || 0) / 5) * 5;
-
+          // Same match buildConsensus() used to group votes at write time:
+          // a direct ±5 distance check, not a shared rounding bucket. A
+          // bucket like Math.round(line/5)*5 puts lines that are genuinely
+          // within 5 of each other (e.g. 333 and 338) into different
+          // buckets (335 vs 340) right at the boundary, silently dropping a
+          // real vote and making a genuinely multi-agent finding look
+          // single-agent — that bug is why this now matches buildConsensus
+          // exactly instead of re-deriving its own bucket.
           for (const agent of relevantAgents) {
             const existing = byModel.get(agent.model);
             if (existing?.verdict === "positive") continue; // already confirmed positive
@@ -341,7 +341,7 @@ export class ReviewerController {
             const agentFinding = content?.findings?.find(
               (f) =>
                 f.file === finding.file &&
-                Math.round((f.line || 0) / 5) * 5 === findingLineGroup,
+                Math.abs((f.line || 0) - (finding.line || 0)) <= 5,
             );
 
             if (agentFinding) {
