@@ -147,10 +147,10 @@ export class WebhooksService {
     if (!pr || !repo) return;
 
     // The webhook is subscribed to pull_request, pull_request_review, and
-    // pull_request_review_comment — but review/comment payloads ALSO carry
+    // pull_request_review_comment  but review/comment payloads ALSO carry
     // a `pull_request` object, so without this check every AI-posted review
     // (itself a "pull_request_review" submission) re-triggers this handler,
-    // which posts another review, which re-triggers again — an infinite
+    // which posts another review, which re-triggers again  an infinite
     // self-feedback loop. Only genuine `pull_request` events should ever
     // start a new analysis.
     if (githubEvent && githubEvent !== "pull_request") {

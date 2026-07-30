@@ -1,13 +1,16 @@
-# Prism API (ai-reviewer-app) ⚙️
+# AI Review API (ai-reviewer-app) ⚙️
 
-The core engine for **Prism**. This service handles GitHub webhooks, manages the AI review queue, executes the multi-model consensus logic, and provides secure user authentication.
+The core engine for **AI Review**. This service handles GitHub webhooks, manages the AI review queue, executes the multi-model consensus logic, and provides secure user authentication.
 
 ## 🧠 The Consensus Strategy
-Unlike standard AI reviewers, Prism runs **3 NVIDIA NIM models** in parallel.
+
+Unlike standard AI reviewers, AI Review runs **3 NVIDIA NIM models** in parallel.
+
 - **Confirmed**: Findings flagged by 2 or more models receive a "High Confidence" badge.
 - **Insights**: Disagreements between models are highlighted to show the nuance of the code analysis.
 
 ## 🛠 Tech Stack
+
 - **Runtime**: [NestJS 10](https://nestjs.com/)
 - **ORM**: [Prisma](https://www.prisma.io/)
 - **Database**: [PostgreSQL](https://www.postgresql.org/) (via Supabase)
@@ -21,6 +24,7 @@ Unlike standard AI reviewers, Prism runs **3 NVIDIA NIM models** in parallel.
 This backend implements a secure "handshake" pattern for GitHub authentication:
 
 ### Architecture Flow
+
 1. **Frontend**: Next.js + NextAuth.js v5 authenticates with GitHub OAuth
 2. **Sync**: Frontend sends GitHub `accessToken` to backend
 3. **Verify**: Backend fetches user profile from GitHub API
@@ -30,9 +34,11 @@ This backend implements a secure "handshake" pattern for GitHub authentication:
 ### API Endpoints
 
 #### POST `/auth/github/sync`
+
 Accepts GitHub access token from frontend and returns backend JWT.
 
 **Request:**
+
 ```json
 {
   "accessToken": "gho_xxxxxxxxxxxx"
@@ -40,6 +46,7 @@ Accepts GitHub access token from frontend and returns backend JWT.
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -59,9 +66,11 @@ Accepts GitHub access token from frontend and returns backend JWT.
 ```
 
 #### GET `/auth/profile`
+
 Protected route returning current user's profile. Requires `Authorization: Bearer <token>` header.
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -94,6 +103,7 @@ model User {
 ```
 
 ### Security Features
+
 - JWT tokens with configurable expiration (default: 7 days)
 - Bearer token authentication via Passport.js
 - `JwtAuthGuard` for protecting routes
@@ -101,6 +111,7 @@ model User {
 - CORS configured for frontend integration
 
 ## 🏗 Architecture Flow
+
 1. **Webhook**: Receives PR events from GitHub.
 2. **Queue**: Offloads tasks to BullMQ to prevent timeouts.
 3. **Worker**: Calls 3 AI models, merges findings, and deduplicates by file/line.
@@ -109,17 +120,20 @@ model User {
 ## 🛠 Getting Started
 
 ### Prerequisites
+
 - Node.js 18+
 - PostgreSQL 14+ (or Supabase account)
 - GitHub OAuth App credentials
 
 ### 1. Clone and Install
+
 ```bash
 cd ai-reviewer-app
 npm install
 ```
 
 ### 2. Environment Setup
+
 Copy `.env.example` to `.env` and fill in your credentials:
 
 ```bash
@@ -127,6 +141,7 @@ cp .env.example .env
 ```
 
 **Required variables:**
+
 ```env
 # Database (PostgreSQL)
 DATABASE_URL="postgresql://user:password@localhost:5432/ai_reviewer?schema=public"
@@ -141,6 +156,7 @@ NODE_ENV=development
 ```
 
 ### 3. Database Setup
+
 ```bash
 # Generate Prisma client
 npm run db:generate
@@ -153,6 +169,7 @@ npm run db:studio
 ```
 
 ### 4. Start Development Server
+
 ```bash
 npm run start:dev
 ```
@@ -193,6 +210,7 @@ ai-reviewer-app/
 ## 🧪 Testing the Auth Flow
 
 ### 1. Sync GitHub User
+
 ```bash
 curl -X POST http://localhost:3001/auth/github/sync \
   -H "Content-Type: application/json" \
@@ -200,6 +218,7 @@ curl -X POST http://localhost:3001/auth/github/sync \
 ```
 
 ### 2. Get Profile (Protected)
+
 ```bash
 curl -X GET http://localhost:3001/auth/profile \
   -H "Authorization: Bearer your_jwt_token"
@@ -208,6 +227,7 @@ curl -X GET http://localhost:3001/auth/profile \
 ## 🚀 Production Deployment
 
 ### Environment Variables for Production
+
 ```env
 NODE_ENV=production
 DATABASE_URL="postgresql://..."  # Use connection pooling
@@ -216,6 +236,7 @@ JWT_EXPIRATION="7d"
 ```
 
 ### Build and Start
+
 ```bash
 npm run build
 npm run start:prod
@@ -223,18 +244,18 @@ npm run start:prod
 
 ## 📦 Available Scripts
 
-| Command | Description |
-|---------|-------------|
-| `npm run start:dev` | Start development server with hot reload |
-| `npm run build` | Build for production |
-| `npm run start:prod` | Start production server |
-| `npm run db:generate` | Generate Prisma client |
-| `npm run db:migrate` | Run database migrations |
-| `npm run db:studio` | Open Prisma Studio |
-| `npm run lint` | Run ESLint |
-| `npm run format` | Format code with Prettier |
-| `npm run test` | Run unit tests |
-| `npm run test:e2e` | Run end-to-end tests |
+| Command               | Description                              |
+| --------------------- | ---------------------------------------- |
+| `npm run start:dev`   | Start development server with hot reload |
+| `npm run build`       | Build for production                     |
+| `npm run start:prod`  | Start production server                  |
+| `npm run db:generate` | Generate Prisma client                   |
+| `npm run db:migrate`  | Run database migrations                  |
+| `npm run db:studio`   | Open Prisma Studio                       |
+| `npm run lint`        | Run ESLint                               |
+| `npm run format`      | Format code with Prettier                |
+| `npm run test`        | Run unit tests                           |
+| `npm run test:e2e`    | Run end-to-end tests                     |
 
 ## 📝 License
 

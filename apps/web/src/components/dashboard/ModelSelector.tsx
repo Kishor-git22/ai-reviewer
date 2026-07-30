@@ -90,13 +90,15 @@ export function ModelSelector({ selectedModels, onChange }: ModelSelectorProps) 
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="space-y-0.5">
-          <h3 className="text-lg font-black tracking-tight text-foreground">Select AI Agents</h3>
-          <p className="text-xs font-bold text-muted-foreground">
-            Choose 3 models to perform the multi-agent debate.
+          <h3 className="font-display text-lg font-medium tracking-tight text-foreground">
+            Choose your panel
+          </h3>
+          <p className="text-xs font-medium text-muted-foreground">
+            Pick 3 models to debate every pull request.
           </p>
         </div>
-        <Badge variant="secondary" className="rounded-full px-3 py-1 font-black">
-          {selectedModels.length} / 3 Selected
+        <Badge variant="secondary" className="rounded-md px-2.5 py-1 font-semibold">
+          {selectedModels.length} / 3 selected
         </Badge>
       </div>
 
@@ -104,44 +106,50 @@ export function ModelSelector({ selectedModels, onChange }: ModelSelectorProps) 
         {NVIDIA_MODELS.map((model) => {
           const isSelected = selectedModels.includes(model.id)
           const isDisabled = !isSelected && selectedModels.length >= 3
+          const selectedIndex = selectedModels.indexOf(model.id)
+          const agentColor = [
+            'border-agent-1 ring-agent-1',
+            'border-agent-2 ring-agent-2',
+            'border-agent-3 ring-agent-3',
+          ][selectedIndex % 3]
 
           return (
             <Card
               key={model.id}
               className={cn(
-                'group relative cursor-pointer overflow-hidden border-border/50 bg-card/50 transition-all hover:border-primary/50',
-                isSelected && 'border-primary ring-1 ring-primary',
+                'group relative cursor-pointer overflow-hidden border-border/60 bg-card/40 transition-colors hover:border-primary/40',
+                isSelected && cn('ring-1', agentColor),
                 isDisabled && 'cursor-not-allowed opacity-50 grayscale'
               )}
               onClick={() => !isDisabled && toggleModel(model.id)}
             >
               <CardContent className="p-4">
                 <div className="flex items-start justify-between">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/50 text-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
-                    <Cpu size={20} />
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent/50 text-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
+                    <Cpu size={18} />
                   </div>
                   {isSelected && (
-                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg">
-                      <Check size={14} strokeWidth={3} />
+                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                      <Check size={13} strokeWidth={3} />
                     </div>
                   )}
                 </div>
                 <div className="mt-4">
                   <div className="flex items-center gap-2">
-                    <span className="font-black text-foreground">{model.name}</span>
+                    <span className="font-semibold text-foreground">{model.name}</span>
                     <Badge
                       variant="outline"
-                      className="px-1.5 py-0 text-[8px] font-black uppercase tracking-widest"
+                      className="px-1.5 py-0 text-[8px] font-semibold uppercase tracking-wider"
                     >
                       {model.provider}
                     </Badge>
                   </div>
-                  <p className="mt-2 text-[10px] font-bold leading-relaxed text-muted-foreground">
+                  <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
                     {model.description}
                   </p>
                   <div className="mt-3 flex items-center gap-1.5">
                     <div className="h-1 w-1 rounded-full bg-primary" />
-                    <span className="text-[9px] font-black uppercase tracking-wider text-primary">
+                    <span className="text-[9px] font-semibold uppercase tracking-wider text-primary">
                       {model.capability}
                     </span>
                   </div>

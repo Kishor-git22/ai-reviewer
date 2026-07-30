@@ -4,28 +4,32 @@ import { useState, useEffect, Suspense } from 'react'
 import { signIn } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
-import {
-  Github,
-  Code2,
-  Sparkles,
-  Terminal,
-  Cpu,
-  Layers,
-  Shield,
-  Zap,
-  Twitter,
-  Linkedin,
-  Mail,
-  AlertCircle,
-} from 'lucide-react'
-import { HeroPrism } from '@/components/canvas/HeroPrism'
+import { Github, Terminal, Layers, MessageSquare, Users, Zap, Mail, Linkedin } from 'lucide-react'
+import { HeroScene } from '@/components/canvas/HeroScene'
+import { Logo, LogoMark } from '@/components/brand/Logo'
+import { ModelCube } from '@/components/brand/ModelCube'
+import { LogoPlate } from '@/components/brand/LogoPlate'
+import { PROVIDER_ICONS } from '@/components/brand/ProviderLogos'
 import { Button } from '@/components/ui/button'
-import { NVIDIA_MODELS, LANDING_STATS, FEATURES } from '@/lib/data'
+import { NVIDIA_MODELS, FEATURES } from '@/lib/data'
+import { usePublicStats } from '@/hooks/usePrAnalysis'
+import { formatNumber } from '@/lib/utils'
+
+const MODEL_CUBE_COLORS = [
+  'bg-agent-1/70',
+  'bg-agent-2/70',
+  'bg-agent-3/70',
+  'bg-primary/70',
+  'bg-success/70',
+  'bg-warning/70',
+  'bg-destructive/70',
+]
 
 function LandingContent() {
   const [isLoading, setIsLoading] = useState(false)
   const searchParams = useSearchParams()
   const error = searchParams.get('error')
+  const { data: stats, isLoading: isStatsLoading } = usePublicStats()
 
   const getErrorMessage = (error: string) => {
     switch (error) {
@@ -63,62 +67,59 @@ function LandingContent() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 font-sans text-white selection:bg-blue-500/30">
+    <div className="min-h-screen bg-background font-sans text-foreground selection:bg-primary/30">
       {/* Header */}
-      <header className="fixed left-0 right-0 top-0 z-50 border-b border-white/5 bg-slate-950/80 backdrop-blur-md">
-        <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-6">
-          <div className="flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/20">
-              <Code2 className="text-white" size={24} />
-            </div>
-            <span className="text-xl font-black tracking-tighter text-white">PRISM</span>
-          </div>
+      <header className="fixed left-0 right-0 top-0 z-50 border-b border-border/60 bg-background/80 backdrop-blur-md">
+        <div className="mx-auto flex h-[4.5rem] max-w-[100rem] items-center justify-between px-6 py-3">
+          <Logo />
           <div className="flex items-center gap-6">
             <a
               href="#features"
-              className="hidden text-sm font-medium text-slate-400 transition-colors hover:text-white md:block"
+              className="hidden text-sm font-medium text-muted-foreground transition-colors hover:text-foreground md:block"
             >
               Features
             </a>
             <a
-              href="https://github.com"
-              target="_blank"
-              rel="noreferrer"
-              className="hidden text-sm font-medium text-slate-400 transition-colors hover:text-white md:block"
+              href="/docs"
+              className="hidden text-sm font-medium text-muted-foreground transition-colors hover:text-foreground md:block"
             >
-              Open Source
+              Docs
             </a>
             <Button
               onClick={handleLogin}
               disabled={isLoading}
               variant="outline"
-              className="border-white/10 bg-white/10 text-white hover:bg-white/20"
+              className="border-border/60 bg-transparent text-foreground hover:bg-accent"
             >
-              {isLoading ? 'Loading...' : 'Log In'}
+              {isLoading ? 'Loading...' : 'Log in'}
             </Button>
           </div>
         </div>
       </header>
 
       {/* Hero Section */}
-      <section className="relative overflow-hidden px-6 pb-16 pt-32">
-        <div className="pointer-events-none absolute left-1/2 top-0 h-[600px] w-[1000px] -translate-x-1/2 rounded-full bg-blue-600/10 blur-[120px]" />
+      <section className="relative overflow-hidden px-6 pb-16 pt-36">
+        {/* Full-bleed atmosphere  fills the gutters on wide viewports instead
+            of leaving flat, empty space either side of the centered column. */}
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(hsl(var(--border))_1px,transparent_1px)] bg-[length:36px_36px] opacity-[0.15] [mask-image:radial-gradient(ellipse_80%_60%_at_50%_0%,black,transparent)]" />
+        <div className="pointer-events-none absolute left-1/2 top-0 h-[600px] w-[1000px] -translate-x-1/2 rounded-full bg-primary/5 blur-[140px]" />
+        <div className="pointer-events-none absolute -left-40 top-1/2 h-[500px] w-[500px] -translate-y-1/2 rounded-full bg-agent-1/10 blur-[130px]" />
+        <div className="pointer-events-none absolute -right-40 top-1/3 h-[500px] w-[500px] -translate-y-1/2 rounded-full bg-agent-3/10 blur-[130px]" />
 
-        <div className="mx-auto max-w-7xl">
+        <div className="mx-auto max-w-[100rem]">
           <div className="grid items-center gap-12 lg:grid-cols-2">
             <div className="relative z-10 text-center lg:text-left">
-              <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-blue-500/20 bg-blue-500/10 px-4 py-2 text-xs font-bold uppercase tracking-widest text-blue-400">
-                <Sparkles size={14} /> Open Source AI Engine
+              <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-primary">
+                Open source review engine
               </div>
-              <h1 className="mb-8 text-5xl font-black leading-[0.9] tracking-tighter md:text-6xl lg:text-7xl">
-                Review Code With{' '}
-                <span className="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
-                  Total Confidence.
-                </span>
+              <h1 className="mb-8 font-display text-5xl font-medium leading-[1.05] tracking-tight md:text-6xl lg:text-7xl">
+                Code review that
+                <br />
+                <span className="italic text-primary">argues it out</span> first.
               </h1>
-              <p className="mx-auto mb-12 max-w-2xl text-lg leading-relaxed text-slate-400 md:text-xl lg:mx-0">
-                The world&apos;s first open-source reviewer that refracts every pull request through
-                3 massive AI models to eliminate false positives.
+              <p className="mx-auto mb-12 max-w-2xl text-lg leading-relaxed text-muted-foreground md:text-xl lg:mx-0">
+                AI Review sends every pull request to a panel of three independent AI models. They
+                debate the change, and only the findings they agree on ever reach you.
               </p>
 
               <div className="flex flex-col items-center justify-center gap-4 sm:flex-row lg:justify-start">
@@ -126,110 +127,136 @@ function LandingContent() {
                   onClick={handleLogin}
                   disabled={isLoading}
                   size="lg"
-                  className="flex w-full items-center justify-center gap-3 rounded-2xl bg-white px-10 py-6 text-lg font-bold text-black hover:bg-slate-200 sm:w-auto"
+                  className="flex w-full items-center justify-center gap-3 rounded-lg px-8 py-6 text-base font-semibold sm:w-auto"
                 >
-                  <Github size={22} />
-                  {isLoading ? 'Loading...' : 'Login with GitHub'}
+                  <Github size={20} />
+                  {isLoading ? 'Loading...' : 'Continue with GitHub'}
                 </Button>
                 <a
-                  href="https://github.com"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex w-full items-center justify-center gap-3 rounded-2xl border border-white/10 bg-slate-900 px-10 py-6 text-lg font-bold text-white transition-all hover:bg-slate-800 sm:w-auto"
+                  href="/docs"
+                  className="flex w-full items-center justify-center gap-3 rounded-lg border border-border/60 bg-card px-8 py-6 text-base font-semibold text-foreground transition-colors hover:bg-accent sm:w-auto"
                 >
-                  <Terminal size={22} /> View Repository
+                  <Terminal size={20} /> Read the docs
                 </a>
               </div>
 
-              {/* Metrics */}
-              <div className="mx-auto mt-12 grid max-w-lg grid-cols-3 gap-4 lg:mx-0">
-                <div className="rounded-2xl border border-white/5 bg-white/5 p-4">
-                  <div className="mb-1 text-2xl font-black text-white md:text-3xl">
-                    {LANDING_STATS.members}
-                  </div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                    Active Members
+              {/* Metrics  real counts from the database, polling every 5s */}
+              <div className="mx-auto mt-4 flex max-w-lg items-center justify-center gap-1.5 lg:mx-0 lg:justify-start">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-success" />
+                </span>
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Live
+                </span>
+              </div>
+              <div className="mx-auto mt-3 grid max-w-lg grid-cols-3 gap-4 lg:mx-0">
+                <div className="rounded-xl border border-border/60 bg-card/40 p-4">
+                  {isStatsLoading ? (
+                    <div className="mb-1 h-8 w-14 animate-pulse rounded bg-accent/40" />
+                  ) : (
+                    <div className="mb-1 text-2xl font-semibold text-foreground md:text-3xl">
+                      {formatNumber(stats?.members ?? 0)}
+                    </div>
+                  )}
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Active members
                   </div>
                 </div>
-                <div className="rounded-2xl border border-white/5 bg-white/5 p-4">
-                  <div className="mb-1 text-2xl font-black text-blue-400 md:text-3xl">
-                    {LANDING_STATS.prsReviewed}
-                  </div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                    PRs Reviewed
+                <div className="rounded-xl border border-border/60 bg-card/40 p-4">
+                  {isStatsLoading ? (
+                    <div className="mb-1 h-8 w-14 animate-pulse rounded bg-accent/40" />
+                  ) : (
+                    <div className="mb-1 text-2xl font-semibold text-agent-1 md:text-3xl">
+                      {formatNumber(stats?.prsReviewed ?? 0)}
+                    </div>
+                  )}
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    PRs reviewed
                   </div>
                 </div>
-                <div className="rounded-2xl border border-white/5 bg-white/5 p-4">
-                  <div className="mb-1 text-2xl font-black text-green-400 md:text-3xl">
-                    {LANDING_STATS.successRate}
-                  </div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                    Accuracy Rate
+                <div className="rounded-xl border border-border/60 bg-card/40 p-4">
+                  {isStatsLoading ? (
+                    <div className="mb-1 h-8 w-14 animate-pulse rounded bg-accent/40" />
+                  ) : (
+                    <div className="mb-1 text-2xl font-semibold text-success md:text-3xl">
+                      {stats?.consensusRate != null ? `${stats.consensusRate}%` : ''}
+                    </div>
+                  )}
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Accuracy rate
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* 3D Prism */}
+            {/* 3D Consensus Scene */}
             <div className="h-[400px] lg:h-[500px]">
-              <HeroPrism />
+              <HeroScene />
             </div>
           </div>
         </div>
       </section>
 
       {/* Infinite Loop Section */}
-      <section className="overflow-hidden bg-slate-950 py-12">
+      <section className="overflow-hidden bg-background py-12">
         <div className="mb-8 text-center">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
-            Powered by Enterprise NVIDIA Models
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            Powered by enterprise NVIDIA models
           </p>
         </div>
-        <div className="relative w-full overflow-hidden border-y border-white/5 bg-slate-900/30 py-8">
-          <div className="flex animate-marquee whitespace-nowrap">
-            {[...NVIDIA_MODELS, ...NVIDIA_MODELS].map((model, idx) => (
-              <div
-                key={idx}
-                className="mx-12 flex cursor-default items-center gap-3 opacity-50 grayscale transition-all hover:opacity-100 hover:grayscale-0"
-              >
-                <div className="rounded-lg bg-white/10 p-2">
-                  <Cpu size={24} className="text-blue-400" />
+        <div className="relative w-full overflow-hidden border-y border-border/60 bg-card/20 py-8">
+          <div className="flex w-max animate-marquee whitespace-nowrap">
+            {[...NVIDIA_MODELS, ...NVIDIA_MODELS].map((model, idx) => {
+              const ProviderIcon = PROVIDER_ICONS[model.provider]
+              return (
+                <div
+                  key={idx}
+                  className="mx-12 flex cursor-default items-center gap-4 opacity-50 grayscale transition-all duration-300 hover:opacity-100 hover:grayscale-0"
+                >
+                  {ProviderIcon ? (
+                    <LogoPlate>
+                      <ProviderIcon className="h-4 w-4 text-foreground" />
+                    </LogoPlate>
+                  ) : (
+                    <ModelCube colorClassName={MODEL_CUBE_COLORS[idx % MODEL_CUBE_COLORS.length]} />
+                  )}
+                  <span className="font-semibold tracking-tight text-foreground">{model.name}</span>
                 </div>
-                <span className="font-bold tracking-tight text-white">{model.name}</span>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       </section>
 
       {/* Features Section */}
-      <section id="features" className="px-6 py-24">
-        <div className="mx-auto max-w-7xl">
-          <div className="mb-16 flex flex-col items-end justify-between gap-8 md:flex-row">
-            <div className="max-w-xl">
-              <h2 className="mb-6 text-4xl font-black tracking-tight md:text-5xl">
-                What makes us different?
-              </h2>
-              <p className="text-lg text-slate-400">
-                Traditional tools use static rules. We use a multi-agent debate system to ensure
-                every comment is meaningful.
-              </p>
-            </div>
+      <section id="features" className="px-6 py-14">
+        <div className="mx-auto max-w-[100rem]">
+          <div className="mb-8 max-w-2xl">
+            <h2 className="mb-4 font-display text-4xl font-medium tracking-tight md:text-5xl">
+              Why trust this one?
+            </h2>
+            <p className="text-lg text-muted-foreground">
+              Most AI reviewers say yes to everything, flag every nitpick, hedge every verdict, and
+              get muted within a week. This one only speaks once three independent models have
+              actually argued it out and landed on the same answer.
+            </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {FEATURES.map((f, i) => (
               <div
                 key={i}
-                className="group rounded-3xl border border-white/5 bg-slate-900/50 p-10 transition-all duration-500 hover:border-blue-500/50"
+                className="group rounded-2xl border border-border/60 bg-card/40 p-5 transition-colors hover:border-primary/40"
               >
-                <div className="mb-8 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/5 bg-slate-950 transition-transform group-hover:scale-110">
-                  {f.icon === 'layers' && <Layers className="text-blue-400" />}
-                  {f.icon === 'shield' && <Shield className="text-green-400" />}
-                  {f.icon === 'zap' && <Zap className="text-yellow-400" />}
+                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl border border-border/60 bg-background">
+                  {f.icon === 'layers' && <Layers className="text-agent-1" size={18} />}
+                  {f.icon === 'debate' && <MessageSquare className="text-agent-2" size={18} />}
+                  {f.icon === 'panel' && <Users className="text-agent-3" size={18} />}
+                  {f.icon === 'zap' && <Zap className="text-warning" size={18} />}
                 </div>
-                <h3 className="mb-4 text-2xl font-bold text-white">{f.title}</h3>
-                <p className="leading-relaxed text-slate-400">{f.description}</p>
+                <h3 className="mb-2 text-lg font-semibold text-foreground">{f.title}</h3>
+                <p className="text-sm leading-relaxed text-muted-foreground">{f.description}</p>
               </div>
             ))}
           </div>
@@ -237,109 +264,130 @@ function LandingContent() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-white/5 px-6 pb-12 pt-20">
-        <div className="mx-auto max-w-7xl">
-          <div className="mb-16 grid grid-cols-1 gap-12 md:grid-cols-4">
-            <div className="col-span-1 md:col-span-1">
-              <div className="mb-6 flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500">
-                  <Code2 className="text-white" size={18} />
-                </div>
-                <span className="font-black text-white">PRISM</span>
-              </div>
-              <p className="mb-8 text-sm leading-relaxed text-slate-500">
-                Building the future of secure, high-quality code through collective AI intelligence.
-                100% Open Source.
+      <footer className="relative border-t border-border/60 px-6 pb-10 pt-10">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
+
+        <div className="mx-auto max-w-[100rem]">
+          <div className="mb-10 grid grid-cols-1 gap-10 md:grid-cols-[1.3fr_1fr_1fr_1.2fr]">
+            <div>
+              <Logo className="mb-4" markClassName="h-7 w-7" textClassName="text-base" />
+              <p className="max-w-[26ch] text-sm leading-relaxed text-muted-foreground">
+                Consensus-driven code review, built in the open.
               </p>
-              <div className="flex gap-4">
-                <a
-                  href="#"
-                  className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/5 text-slate-400 transition-colors hover:bg-blue-500 hover:text-white"
-                >
-                  <Twitter size={18} />
-                </a>
-                <a
-                  href="#"
-                  className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/5 text-slate-400 transition-colors hover:bg-blue-500 hover:text-white"
-                >
-                  <Linkedin size={18} />
-                </a>
-                <a
-                  href="#"
-                  className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/5 text-slate-400 transition-colors hover:bg-blue-500 hover:text-white"
-                >
-                  <Github size={18} />
-                </a>
-              </div>
             </div>
 
             <div>
-              <h4 className="mb-6 font-bold text-white">Product</h4>
-              <ul className="space-y-4 text-sm text-slate-500">
+              <h4 className="mb-5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                <span className="h-1 w-1 rounded-full bg-agent-1" />
+                Product
+              </h4>
+              <ul className="space-y-3.5 text-sm text-muted-foreground">
                 <li>
-                  <a href="#" className="transition-colors hover:text-white">
+                  <a href="/docs" className="transition-colors hover:text-foreground">
                     Documentation
                   </a>
                 </li>
                 <li>
-                  <a href="#" className="transition-colors hover:text-white">
+                  <a href="#features" className="transition-colors hover:text-foreground">
                     Features
                   </a>
                 </li>
                 <li>
-                  <a href="#" className="transition-colors hover:text-white">
-                    API Reference
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="transition-colors hover:text-white">
-                    Roadmap
+                  <a href="/docs#api-reference" className="transition-colors hover:text-foreground">
+                    API reference
                   </a>
                 </li>
               </ul>
             </div>
 
             <div>
-              <h4 className="mb-6 font-bold text-white">Community</h4>
-              <ul className="space-y-4 text-sm text-slate-500">
+              <h4 className="mb-5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                <span className="h-1 w-1 rounded-full bg-agent-2" />
+                Community
+              </h4>
+              <ul className="space-y-3.5 text-sm text-muted-foreground">
                 <li>
-                  <a href="#" className="transition-colors hover:text-white">
-                    GitHub Discussions
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="transition-colors hover:text-white">
-                    Discord Server
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="transition-colors hover:text-white">
+                  <a href="/docs#contributing" className="transition-colors hover:text-foreground">
                     Contributing
                   </a>
                 </li>
                 <li>
-                  <a href="#" className="transition-colors hover:text-white">
-                    Code of Conduct
+                  <a
+                    href="/docs#code-of-conduct"
+                    className="transition-colors hover:text-foreground"
+                  >
+                    Code of conduct
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://github.com/Kishor-git22/ai-reviewer"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground"
+                  >
+                    <Github size={14} /> Source
                   </a>
                 </li>
               </ul>
             </div>
 
             <div>
-              <h4 className="mb-6 font-bold text-white">Contact Us</h4>
-              <p className="mb-6 text-sm text-slate-500">
-                Questions or feedback? We&apos;d love to hear from you.
-              </p>
-              <a
-                href="mailto:hello@prism.dev"
-                className="flex items-center gap-2 font-bold text-blue-400 transition-colors hover:text-blue-300"
-              >
-                <Mail size={16} /> hello@prism.dev
-              </a>
+              <h4 className="mb-5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                <span className="h-1 w-1 rounded-full bg-agent-3" />
+                Contact
+              </h4>
+              <div className="rounded-xl border border-border/60 bg-card/40 p-4">
+                <p className="mb-3 text-sm leading-relaxed text-muted-foreground">
+                  Questions or feedback? We&apos;d love to hear from you.
+                </p>
+                <a
+                  href="mailto:kishora.2204@gmail.com"
+                  className="flex items-center gap-2 text-sm font-semibold text-primary transition-colors hover:text-primary/80"
+                >
+                  <Mail size={15} className="shrink-0" />
+                  <span className="break-all">kishora.2204@gmail.com</span>
+                </a>
+              </div>
             </div>
           </div>
-          <div className="border-t border-white/5 pt-8 text-center text-xs font-medium uppercase tracking-widest text-slate-600">
-            © 2024 PRISM. Released under MIT License.
+
+          <div className="flex flex-col items-center gap-5 border-t border-border/60 pt-8 sm:flex-row sm:justify-between">
+            <div className="flex items-center gap-2.5 text-xs font-medium text-muted-foreground">
+              <LogoMark className="h-4 w-4" />
+              <span>
+                © 2026 <span className="font-semibold text-foreground">AI Review</span>
+                <span className="mx-1.5 text-border">·</span>
+                MIT License
+              </span>
+            </div>
+
+            <div className="flex items-center gap-3 text-xs font-medium text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <span className="h-1 w-1 rounded-full bg-primary" />
+                Built by <span className="font-semibold text-foreground">Kishor</span>
+              </span>
+              <div className="flex items-center gap-1.5">
+                <a
+                  href="https://github.com/Kishor-git22"
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="GitHub profile"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 text-muted-foreground transition-colors hover:border-primary/40 hover:bg-accent hover:text-foreground"
+                >
+                  <Github size={15} />
+                </a>
+                <a
+                  href="https://www.linkedin.com/in/kishor-annamalai/"
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="LinkedIn profile"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 text-muted-foreground transition-colors hover:border-primary/40 hover:bg-accent hover:text-foreground"
+                >
+                  <Linkedin size={15} />
+                </a>
+              </div>
+            </div>
           </div>
         </div>
       </footer>
@@ -349,7 +397,7 @@ function LandingContent() {
 
 export default function LandingPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-slate-950" />}>
+    <Suspense fallback={<div className="min-h-screen bg-background" />}>
       <LandingContent />
     </Suspense>
   )

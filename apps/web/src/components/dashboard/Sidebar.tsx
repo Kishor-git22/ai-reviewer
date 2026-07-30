@@ -2,11 +2,12 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, Settings, LogOut, Code2, Cpu, Sparkles, ArrowLeft } from 'lucide-react'
+import { LayoutDashboard, Settings, LogOut, Cpu, ArrowLeft, BookOpen } from 'lucide-react'
 import { signOut, useSession } from 'next-auth/react'
 import { useUserSettings } from '@/hooks/usePrAnalysis'
 
 import { cn } from '@/lib/utils'
+import { Logo } from '@/components/brand/Logo'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -18,12 +19,12 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
-  SidebarTrigger,
   SidebarInset,
 } from '@/components/ui/sidebar'
 
 interface SidebarProps {
   children?: React.ReactNode
+  defaultOpen?: boolean
 }
 
 const navigation = [
@@ -39,7 +40,9 @@ const navigation = [
   },
 ]
 
-export function DashboardSidebar({ children }: SidebarProps) {
+const AGENT_COLORS = ['bg-agent-1', 'bg-agent-2', 'bg-agent-3']
+
+export function DashboardSidebar({ children, defaultOpen = true }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const { data: session } = useSession()
@@ -49,7 +52,7 @@ export function DashboardSidebar({ children }: SidebarProps) {
 
   return (
     <SidebarProvider
-      defaultOpen
+      defaultOpen={defaultOpen}
       style={
         {
           '--sidebar-width-icon': '0rem',
@@ -60,21 +63,14 @@ export function DashboardSidebar({ children }: SidebarProps) {
         {/* Floating Independent Sidebar Panel */}
         <ShadcnSidebar variant="floating" collapsible="icon" className="border-none bg-transparent">
           <div className="flex h-full flex-col gap-2">
-            {/* Sidebar Branding & Content Container */}
-            <div className="flex flex-1 flex-col rounded-[2rem] border border-border/50 bg-card/50 shadow-2xl shadow-black/20 backdrop-blur-xl">
-              <SidebarHeader className="border-b border-border/50 p-4">
-                <Link
-                  href="/"
-                  className="flex items-center gap-2 group-data-[collapsible=icon]:hidden"
-                >
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary shadow-lg shadow-primary/30">
-                    <Code2 className="h-4 w-4 text-primary-foreground" />
-                  </div>
-                  <span className="text-lg font-black tracking-tighter text-foreground">PRISM</span>
+            <div className="flex flex-1 flex-col rounded-2xl border border-border/60 bg-card shadow-lg shadow-black/20">
+              <SidebarHeader className="border-b border-border/60 p-4">
+                <Link href="/" className="group-data-[collapsible=icon]:hidden">
+                  <Logo markClassName="h-8 w-8" textClassName="text-base" />
                 </Link>
               </SidebarHeader>
 
-              <SidebarContent className="gap-0 px-1 py-3">
+              <SidebarContent className="gap-0 px-2 py-3">
                 <SidebarMenu>
                   {navigation.map((item) => (
                     <SidebarMenuItem key={item.name} className="mb-0.5">
@@ -82,11 +78,11 @@ export function DashboardSidebar({ children }: SidebarProps) {
                         asChild
                         isActive={pathname === item.href}
                         tooltip={item.name}
-                        className="h-10 rounded-xl transition-all duration-300 hover:bg-primary/10 data-[active=true]:bg-primary data-[active=true]:text-primary-foreground data-[active=true]:shadow-lg data-[active=true]:shadow-primary/20"
+                        className="h-10 rounded-lg transition-colors duration-150 hover:bg-accent data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
                       >
                         <Link href={item.href} className="flex items-center gap-2.5 px-2.5">
                           <item.icon className="h-4 w-4 shrink-0" />
-                          <span className="text-xs font-bold">{item.name}</span>
+                          <span className="text-[13px] font-medium">{item.name}</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -94,70 +90,77 @@ export function DashboardSidebar({ children }: SidebarProps) {
                 </SidebarMenu>
 
                 {/* Status Section */}
-                <div className="mt-4 px-2 group-data-[collapsible=icon]:hidden">
-                  <div className="rounded-[1.5rem] border border-border/50 bg-accent/20 p-3">
-                    <div className="mb-2 flex items-center justify-between">
+                <div className="mt-4 px-1.5 group-data-[collapsible=icon]:hidden">
+                  <div className="rounded-xl border border-border/60 bg-background/40 p-3">
+                    <div className="mb-2.5 flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <div className="h-1 w-1 animate-pulse rounded-full bg-green-500" />
-                        <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
-                          Neural Engine
+                        <div className="h-1.5 w-1.5 rounded-full bg-success" />
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          Review panel
                         </span>
                       </div>
                       <Badge
                         variant="outline"
-                        className="h-4 border-primary/20 bg-primary/5 px-1.5 text-[7px] font-black uppercase text-primary"
+                        className="h-4 border-primary/30 bg-primary/10 px-1.5 text-[9px] font-semibold text-primary"
                       >
                         Active
                       </Badge>
                     </div>
-                    <div className="space-y-2">
-                      {settings?.selectedModels?.map((mid: string, i: number) => {
-                        const colors = ['text-blue-400', 'text-purple-400', 'text-yellow-400']
-                        return (
-                          <div
-                            key={mid}
-                            className="flex items-center gap-2.5 rounded-xl bg-background/40 p-1.5 transition-all hover:bg-background/60"
-                          >
-                            <Cpu className={cn('h-3 w-3', colors[i % 3])} />
-                            <span className="truncate text-[9px] font-bold">
-                              {mid
-                                .split('-')
-                                .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-                                .join(' ')}
-                            </span>
-                          </div>
-                        )
-                      })}
+                    <div className="space-y-1.5">
+                      {settings?.selectedModels?.map((mid: string, i: number) => (
+                        <div
+                          key={mid}
+                          className="flex items-center gap-2.5 rounded-lg bg-background/60 px-2 py-1.5"
+                        >
+                          <span
+                            className={cn('h-1.5 w-1.5 shrink-0 rounded-full', AGENT_COLORS[i % 3])}
+                          />
+                          <span className="truncate text-[11px] font-medium text-foreground/80">
+                            {mid
+                              .split('-')
+                              .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+                              .join(' ')}
+                          </span>
+                        </div>
+                      ))}
                       {!settings?.selectedModels?.length &&
                         [1, 2, 3].map((i) => (
-                          <div key={i} className="h-6 animate-pulse rounded-xl bg-background/20" />
+                          <div key={i} className="h-6 animate-pulse rounded-lg bg-background/30" />
                         ))}
                     </div>
                   </div>
                 </div>
+
+                <div className="mt-auto px-1.5 pt-3 group-data-[collapsible=icon]:hidden">
+                  <a
+                    href="/docs"
+                    className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  >
+                    <BookOpen className="h-3.5 w-3.5" />
+                    Documentation
+                  </a>
+                </div>
               </SidebarContent>
 
-              <SidebarFooter className="border-t border-border/50 p-4">
+              <SidebarFooter className="border-t border-border/60 p-3">
                 <div className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center">
                   {session?.user?.image ? (
-                    <>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={session.user.image}
-                        alt={session.user.login || 'User'}
-                        className="h-8 w-8 shrink-0 rounded-xl border border-border/50 object-cover shadow-sm transition-transform hover:scale-110"
-                      />
-                    </>
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={session.user.image}
+                      alt={session.user.login || 'User'}
+                      className="h-8 w-8 shrink-0 rounded-lg border border-border/60 object-cover"
+                    />
                   ) : (
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-accent text-[10px] font-black uppercase">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent text-[10px] font-semibold uppercase">
                       {session?.user?.login?.charAt(0)}
                     </div>
                   )}
                   <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
-                    <p className="truncate text-[11px] font-black text-foreground">
+                    <p className="truncate text-[12px] font-semibold text-foreground">
                       {session?.user?.login}
                     </p>
-                    <p className="truncate text-[8px] font-bold text-muted-foreground">
+                    <p className="truncate text-[10px] text-muted-foreground">
                       {session?.user?.email}
                     </p>
                   </div>
@@ -166,10 +169,10 @@ export function DashboardSidebar({ children }: SidebarProps) {
                   variant="ghost"
                   size="sm"
                   onClick={() => signOut({ callbackUrl: '/' })}
-                  className="mt-4 w-full justify-start gap-2.5 rounded-xl px-2.5 font-black text-muted-foreground transition-all hover:bg-destructive/10 hover:text-destructive"
+                  className="mt-3 w-full justify-start gap-2.5 rounded-lg px-2.5 text-xs font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                 >
                   <LogOut className="h-4 w-4 shrink-0" />
-                  <span className="group-data-[collapsible=icon]:hidden">Sign Out</span>
+                  <span className="group-data-[collapsible=icon]:hidden">Sign out</span>
                 </Button>
               </SidebarFooter>
             </div>
@@ -177,27 +180,29 @@ export function DashboardSidebar({ children }: SidebarProps) {
         </ShadcnSidebar>
 
         {/* Separated Main Content Panel - Dynamically synchronized with Sidebar state */}
-        <SidebarInset className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[2rem] border border-border/50 bg-card/30 shadow-2xl shadow-black/20 backdrop-blur-xl transition-[margin] duration-300 ease-in-out md:peer-data-[state=collapsed]:ml-0 md:peer-data-[state=expanded]:ml-[calc(var(--sidebar-width)+theme(spacing.1))]">
-          {/* Header - Transparent Glass */}
-          <header className="flex h-20 shrink-0 items-center justify-between border-b border-border/50 px-8">
-            <div className="flex items-center gap-6">
+        <SidebarInset className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/60 bg-card/50 shadow-lg shadow-black/20 transition-[margin] duration-200 ease-out md:peer-data-[state=collapsed]:ml-0 md:peer-data-[state=expanded]:ml-[calc(var(--sidebar-width)+theme(spacing.1))]">
+          <header className="flex h-16 shrink-0 items-center justify-between border-b border-border/60 px-6">
+            <div className="flex items-center gap-4">
               {!isMainDashboard && (
                 <Button
                   variant="outline"
                   size="icon"
                   onClick={() => router.back()}
-                  className="h-10 w-10 rounded-xl border-border/50 bg-background/50 hover:bg-accent"
+                  className="h-9 w-9 rounded-lg border-border/60 bg-background/50 hover:bg-accent"
                 >
-                  <ArrowLeft className="h-5 w-5" />
+                  <ArrowLeft className="h-4 w-4" />
                 </Button>
               )}
-              <Badge variant="outline" className="hidden rounded-full px-4 font-black sm:flex">
-                v1.0.0 Stable
+              <Badge
+                variant="outline"
+                className="hidden items-center gap-1.5 rounded-md border-border/60 px-2.5 font-medium text-muted-foreground sm:flex"
+              >
+                <Cpu className="h-3 w-3" />
+                v1.0
               </Badge>
             </div>
           </header>
 
-          {/* Independent Scrollable Content */}
           <main className="scrollbar-hide flex-1 overflow-y-auto p-0 focus:outline-none">
             {children}
           </main>

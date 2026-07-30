@@ -24,22 +24,22 @@ interface AgentDebateLogProps {
 function VerdictIcon({ verdict }: { verdict: AgentReasoning['verdict'] }) {
   switch (verdict) {
     case 'positive':
-      return <CheckCircle2 className="h-4 w-4 text-green-400" />
+      return <CheckCircle2 className="h-4 w-4 text-success" />
     case 'negative':
-      return <XCircle className="h-4 w-4 text-red-400" />
+      return <XCircle className="h-4 w-4 text-destructive" />
     case 'neutral':
-      return <HelpCircle className="h-4 w-4 text-yellow-400" />
+      return <HelpCircle className="h-4 w-4 text-warning" />
   }
 }
 
 function VerdictLabel({ verdict }: { verdict: AgentReasoning['verdict'] }) {
   switch (verdict) {
     case 'positive':
-      return <span className="font-medium text-green-400">Agreed</span>
+      return <span className="font-medium text-success">Agreed</span>
     case 'negative':
-      return <span className="font-medium text-red-400">Disagreed</span>
+      return <span className="font-medium text-destructive">Disagreed</span>
     case 'neutral':
-      return <span className="font-medium text-yellow-400">Uncertain</span>
+      return <span className="font-medium text-warning">Uncertain</span>
   }
 }
 
@@ -58,57 +58,54 @@ export function AgentDebateLog({ finding, children }: AgentDebateLogProps) {
         {children || (
           <Button variant="outline" size="sm" className="gap-2">
             <MessageSquare className="h-4 w-4" />
-            View Agent Debate
+            View debate
           </Button>
         )}
       </SheetTrigger>
       <SheetContent className="w-full border-border bg-background sm:max-w-xl">
         <SheetHeader className="border-b border-border pb-4">
-          <SheetTitle className="flex items-center gap-2 text-lg">
-            <MessageSquare className="h-5 w-5 text-blue-400" />
-            Agent Debate Log
+          <SheetTitle className="flex items-center gap-2 font-display text-lg font-medium">
+            <MessageSquare className="h-5 w-5 text-agent-1" />
+            Debate log
           </SheetTitle>
           <SheetDescription className="text-muted-foreground">
-            Raw reasoning from AI agents analyzing this finding
+            Full reasoning from each agent that reviewed this finding
           </SheetDescription>
         </SheetHeader>
 
         <div className="mt-4 space-y-6">
           {/* Consensus Summary */}
           <div className="rounded-lg border border-border bg-muted/50 p-4">
-            <h4 className="mb-3 text-sm font-semibold text-foreground">Consensus Summary</h4>
+            <h4 className="mb-3 text-sm font-semibold text-foreground">Consensus summary</h4>
             <div className="flex flex-wrap gap-2">
+              <Badge variant="outline" className="border-success/20 bg-success/10 text-success">
+                <CheckCircle2 className="mr-1 h-3 w-3" />
+                {positiveCount} agreed
+              </Badge>
               <Badge
                 variant="outline"
-                className="border-green-500/20 bg-green-500/10 text-green-400"
+                className="border-destructive/20 bg-destructive/10 text-destructive"
               >
-                <CheckCircle2 className="mr-1 h-3 w-3" />
-                {positiveCount} Agreed
-              </Badge>
-              <Badge variant="outline" className="border-red-500/20 bg-red-500/10 text-red-400">
                 <XCircle className="mr-1 h-3 w-3" />
-                {negativeCount} Disagreed
+                {negativeCount} disagreed
               </Badge>
               {neutralCount > 0 && (
-                <Badge
-                  variant="outline"
-                  className="border-yellow-500/20 bg-yellow-500/10 text-yellow-400"
-                >
+                <Badge variant="outline" className="border-warning/20 bg-warning/10 text-warning">
                   <HelpCircle className="mr-1 h-3 w-3" />
-                  {neutralCount} Uncertain
+                  {neutralCount} uncertain
                 </Badge>
               )}
             </div>
             <div className="mt-3 text-sm">
               {finding.consensus ? (
-                <p className="text-green-400">
-                  <span className="font-semibold">Confirmed Consensus:</span> 2+ agents agree on
-                  this finding.
+                <p className="text-success">
+                  <span className="font-semibold">Confirmed:</span> 2 or more agents agree on this
+                  finding.
                 </p>
               ) : (
-                <p className="text-yellow-400">
-                  <span className="font-semibold">Single Agent Finding:</span> Only 1 agent
-                  identified this issue.
+                <p className="text-warning">
+                  <span className="font-semibold">Single agent:</span> only one agent identified
+                  this issue.
                 </p>
               )}
             </div>

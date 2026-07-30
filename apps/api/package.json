@@ -1,10 +1,15 @@
 {
   "name": "ai-reviewer-api",
   "version": "1.0.0",
-  "description": "Prism AI Code Review Platform - NestJS Backend API",
-  "author": "Prism Team",
+  "description": "AI Review - AI Code Review Platform - NestJS Backend API",
+  "author": "Kishor <https://github.com/Kishor-git22>",
   "private": true,
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Kishor-git22/ai-reviewer.git",
+    "directory": "apps/api"
+  },
   "scripts": {
     "build": "nest build",
     "vercel-build": "prisma generate && nest build",

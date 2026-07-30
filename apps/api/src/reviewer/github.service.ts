@@ -233,7 +233,7 @@ export class GithubService {
     const note = {
       none: "",
       "already-tracked":
-        "\n\n*Note: The issue(s) found were already flagged on a previous commit and are still unresolved — no new comments posted to avoid duplicates.*",
+        "\n\n*Note: The issue(s) found were already flagged on a previous commit and are still unresolved no new comments posted to avoid duplicates.*",
       "invalid-paths":
         "\n\n*Note: Line-specific comments were withheld as they referenced files outside the current PR diff.*",
     }[reason];

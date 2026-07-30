@@ -1,20 +1,27 @@
-# Prism Web 💎
+# AI Review Web
 
-The frontend for **Prism**, an open-source AI code review platform. Prism takes a single Pull Request and refracts it through three different AI models to provide a high-confidence, multi-perspective analysis.
+The frontend for **AI Review**, an open-source AI code review platform. AI Review sends a single
+pull request to three independent AI models to provide a high-confidence, multi-perspective
+analysis.
 
 ## 🚀 Overview
 
-- **Landing Page**: Immersive 3D prism visualization with GitHub authentication
-- **Dashboard**: Single-page layout with h-screen overflow-hidden for optimal PR review experience
-- **Refracted Consensus**: Findings are marked "Confirmed" only when 2+ AI agents agree
-- **Agent Debate**: View raw reasoning from all 3 models (Llama, Nemotron, Mixtral) via Sheet drawer
-- **User Control**: Custom model selection (pick 3 of 7 NVIDIA models)
+- **Landing Page**: 3D "consensus core" visualization (three orbiting agents, one verdict) with
+  GitHub authentication
+- **Dashboard**: Single-page layout with `h-screen overflow-hidden` for an uninterrupted review
+  experience
+- **Consensus review**: Findings are marked "Confirmed" only when 2+ AI agents agree
+- **Live debate visualization**: While a review runs, the dashboard shows the panel reading the
+  diff and debating in near real time instead of a bare spinner
+- **Agent Debate Log**: View each model's raw verdict and reasoning per finding via a Sheet drawer
+- **User Control**: Custom model selection (pick 3 of the available NVIDIA-hosted models)
 
 ## 🛠 Tech Stack
 
 - **Framework**: [Next.js 15](https://nextjs.org/) (App Router, Server Components by default)
 - **Language**: [TypeScript](https://www.typescriptlang.org/) (Strict mode)
 - **Styling**: [Tailwind CSS](https://tailwindcss.com/) + [shadcn/ui](https://ui.shadcn.com/)
+- **Type**: Inter (UI/body) + Fraunces (display/headings)
 - **Auth**: [NextAuth.js v5 (Beta)](https://authjs.dev/) (GitHub Provider - only scrapes `user.login` and `user.image`)
 - **Data Fetching**: [TanStack Query v5](https://tanstack.com/query/latest)
 - **3D Visuals**: [React Three Fiber](https://docs.pmnd.rs/react-three-fiber) + [Drei](https://github.com/pmndrs/drei)
@@ -24,35 +31,41 @@ The frontend for **Prism**, an open-source AI code review platform. Prism takes 
 ```
 src/
 ├── app/
-│   ├── (auth)/landing/       # Immersive 3D login page
+│   ├── (auth)/landing/       # 3D login page
 │   ├── (dashboard)/          # Protected dashboard routes
 │   │   ├── dashboard/
 │   │   │   ├── page.tsx      # PR list view
 │   │   │   └── settings/     # Model selection settings
-│   │   └── layout.tsx        # Dashboard layout with sidebar
+│   │   ├── layout.tsx        # Dashboard layout with sidebar
+│   │   └── loading.tsx       # Route-group suspense fallback
+│   ├── docs/                 # Public in-app documentation
 │   ├── api/auth/[...nextauth]/
 │   │   └── route.ts          # NextAuth API route
-│   ├── layout.tsx            # Root layout
-│   ├── page.tsx              # Home (redirects to dashboard if authenticated)
-│   ├── providers.tsx         # QueryClient + SessionProvider
-│   └── globals.css           # Tailwind + CSS variables
+│   ├── icon.svg               # Favicon (file-based metadata)
+│   ├── layout.tsx             # Root layout
+│   ├── page.tsx               # Home (redirects to dashboard if authenticated)
+│   ├── providers.tsx           # QueryClient + SessionProvider
+│   └── globals.css             # Tailwind + CSS variables
 ├── components/
+│   ├── brand/
+│   │   └── Logo.tsx           # Logo mark + wordmark
 │   ├── canvas/
-│   │   └── HeroPrism.tsx     # R3F 3D prism component
+│   │   └── HeroScene.tsx      # R3F "consensus core" 3D scene
 │   ├── dashboard/
-│   │   ├── Sidebar.tsx       # shadcn/ui sidebar navigation
-│   │   ├── AnalysisView.tsx  # PR analysis with findings
+│   │   ├── Sidebar.tsx        # shadcn/ui sidebar navigation
+│   │   ├── AnalysisView.tsx   # PR analysis with findings
+│   │   ├── DebateArena.tsx    # Live debate visualization for in-progress reviews
 │   │   └── AgentDebateLog.tsx # Sheet drawer for agent reasoning
-│   └── ui/                   # shadcn/ui components
+│   └── ui/                    # shadcn/ui components
 ├── hooks/
-│   ├── usePrAnalysis.ts      # TanStack Query hooks for PR data
-│   └── use-mobile.tsx        # Mobile detection hook
+│   ├── usePrAnalysis.ts       # TanStack Query hooks for PR data
+│   └── use-mobile.tsx         # Mobile detection hook
 ├── lib/
-│   ├── auth.ts               # NextAuth v5 configuration
-│   ├── data.ts               # Mock data (NVIDIA models, PRs, findings)
-│   └── utils.ts              # Utility functions (cn, color helpers)
+│   ├── auth.ts                # NextAuth v5 configuration
+│   ├── data.ts                # Mock data (NVIDIA models, PRs, findings)
+│   └── utils.ts               # Utility functions (cn, semantic color helpers)
 └── types/
-    └── index.ts              # TypeScript interfaces
+    └── index.ts                # TypeScript interfaces
 ```
 
 ## 🏗 Getting Started
@@ -93,18 +106,19 @@ src/
    npm run dev
    ```
 
-4. **Open**: http://localhost:3000
+4. **Open**: http://localhost:3000 (docs at http://localhost:3000/docs)
 
 ## 🔑 Key Features Implemented
 
-### 1. Refracted Consensus UI
+### 1. Consensus review UI
 
-Findings are flagged as "Confirmed" only if 2+ agents agree. The `AnalysisView` component separates findings into:
+Findings are flagged as "Confirmed" only if 2+ agents agree. The `AnalysisView` component separates
+findings into:
 
-- **Confirmed Findings**: 2+ agents agree (green badge)
-- **Single Agent Findings**: Only 1 agent identified (yellow badge)
+- **Confirmed findings**: 2+ agents agree
+- **Single-agent findings**: Only 1 agent identified
 
-### 2. Single-Page Constraint
+### 2. Single-page constraint
 
 The dashboard uses `h-screen overflow-hidden` layout:
 
@@ -112,32 +126,41 @@ The dashboard uses `h-screen overflow-hidden` layout:
 - `@/components/dashboard/AnalysisView.tsx`: `h-full flex flex-col` with `ScrollArea`
 - No scrolling on the main layout - only content areas scroll
 
-### 3. Agent Debate Log
+### 3. Live debate visualization
 
-The `AgentDebateLog` component uses a shadcn/ui Sheet (side drawer) to display:
+`DebateArena` renders while an analysis is `in_progress`/`pending`: the three selected agents are
+shown exchanging short reasoning lines with a typing indicator and a consensus meter, so waiting
+for a review feels like watching a panel work rather than staring at a spinner.
+
+### 4. Agent Debate Log
+
+The `AgentDebateLog` component uses a shadcn/ui Sheet (side drawer) to display, per finding:
 
 - Each agent's verdict (Agreed/Disagreed/Uncertain)
-- Confidence scores with visual bars
+- Confidence scores
 - Raw reasoning text from each model
 - Consensus summary (count of each verdict type)
 
-### 4. 3D Hero Prism
+### 5. 3D consensus scene
 
-The `HeroPrism` component in `@/components/canvas/HeroPrism.tsx`:
+The `HeroScene` component in `@/components/canvas/HeroScene.tsx`:
 
 - Uses React Three Fiber for WebGL rendering
-- Creates a triangular prism with glass-like material
-- Includes floating particles around the prism
-- Auto-rotating animation with contact shadows
+- Renders a faceted core (the PR under review) with three colored nodes (the agents) orbiting it
+  on independent paths, tethered by pulsing lines
+- Auto-rotating animation with contact shadows and ambient particles
 
 ## 🎨 Design System
 
-The project uses a dark theme with CSS variables:
+Warm, near-black dark theme deliberately not the default slate/blue-purple template look:
 
-- Background: `hsl(222 47% 4%)` - Deep slate
-- Primary: `hsl(217 91% 60%)` - Blue
-- Card: `hsl(222 47% 6%)` - Slightly lighter than background
-- Border: `hsl(217 33% 17%)` - Subtle borders
+- Background: `hsl(30 8% 6%)` warm charcoal
+- Primary/accent: `hsl(21 82% 56%)` copper/amber, used sparingly as the one signal color
+- Card: `hsl(30 9% 8%)`
+- Border: `hsl(30 10% 16%)`
+- Agent identity colors: `--agent-1` (steel blue), `--agent-2` (muted violet), `--agent-3` (sage)
+- Semantic status colors: `--success`, `--warning`, `--destructive`
+- Display type: Fraunces (serif) for headings, Inter for UI/body
 
 ## 📝 TypeScript Types
 

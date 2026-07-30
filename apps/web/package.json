@@ -1,7 +1,13 @@
 {
-  "name": "prism-web",
+  "name": "ai-review-web",
   "version": "0.1.0",
   "private": true,
+  "author": "Kishor <https://github.com/Kishor-git22>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Kishor-git22/ai-reviewer.git",
+    "directory": "apps/web"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
