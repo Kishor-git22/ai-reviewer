@@ -224,16 +224,25 @@ export class GithubService {
     totalFindings: number,
     qualityScore: number,
     securityScore: number,
+    reason: "none" | "already-tracked" | "invalid-paths" = "invalid-paths",
   ) {
     const octokit = new Octokit({ auth: githubToken });
     const frontendUrl =
       this.configService.get("FRONTEND_URL") || "http://localhost:3001";
 
+    const note = {
+      none: "",
+      "already-tracked":
+        "\n\n*Note: The issue(s) found were already flagged on a previous commit and are still unresolved — no new comments posted to avoid duplicates.*",
+      "invalid-paths":
+        "\n\n*Note: Line-specific comments were withheld as they referenced files outside the current PR diff.*",
+    }[reason];
+
     await octokit.rest.issues.createComment({
       owner,
       repo,
       issue_number: prNumber,
-      body: `## 🤖 AI Multi-Agent Review Summary\n\nAnalysis completed. Total potential issues identified: **${totalFindings}**\nQuality Score: **${qualityScore}%** | Security Score: **${securityScore}%**\n\n*Note: Line-specific comments were withheld as they referenced files outside the current PR diff.*\n\n[View full report and debate log](${frontendUrl}/dashboard)`,
+      body: `## 🤖 AI Multi-Agent Review Summary\n\nAnalysis completed. Total potential issues identified: **${totalFindings}**\nQuality Score: **${qualityScore}%** | Security Score: **${securityScore}%**${note}\n\n[View full report and debate log](${frontendUrl}/dashboard)`,
     });
   }
 
