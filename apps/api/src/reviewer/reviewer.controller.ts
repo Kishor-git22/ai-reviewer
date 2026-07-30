@@ -10,6 +10,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { ReviewerService } from "./reviewer.service";
+import { GithubService } from "./github.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PrismaService } from "../prisma/prisma.service";
 import { Octokit } from "octokit";
@@ -18,6 +19,7 @@ import { Octokit } from "octokit";
 export class ReviewerController {
   constructor(
     private readonly reviewerService: ReviewerService,
+    private readonly githubService: GithubService,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -371,10 +373,44 @@ export class ReviewerController {
       throw new NotFoundException("Finding not found");
     }
 
-    return this.prisma.finding.update({
+    const updated = await this.prisma.finding.update({
       where: { id },
       data: { status: "dismissed" },
     });
+
+    // Best-effort mirror to GitHub: dismissing in the app shouldn't fail
+    // just because the GitHub API hiccups, so this never throws past here -
+    // same treatment as resolveOldFindings() gives its own GraphQL calls.
+    if (finding.githubCommentId) {
+      try {
+        const [user, repoRecord] = await Promise.all([
+          this.prisma.user.findUnique({
+            where: { id: finding.analysis.userId },
+          }),
+          this.prisma.repository.findFirst({
+            where: {
+              name: finding.analysis.repoName,
+              userId: finding.analysis.userId,
+            },
+          }),
+        ]);
+
+        if (user?.githubToken && repoRecord?.owner) {
+          await this.githubService.markCommentAsDismissed(
+            user.githubToken,
+            repoRecord.owner,
+            finding.analysis.repoName,
+            finding.githubCommentId,
+          );
+        }
+      } catch (err: any) {
+        this.reviewerService["logger"].error(
+          `Failed to mirror dismissal to GitHub for finding ${id}: ${err.message}`,
+        );
+      }
+    }
+
+    return updated;
   }
 
   private mapAgentReasonings(analysis: any) {
