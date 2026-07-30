@@ -13,7 +13,10 @@ import {
   MessageSquare,
   Cpu,
   RefreshCw,
+  EyeOff,
+  Loader2,
 } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -22,6 +25,7 @@ import { AgentDebateLog } from './AgentDebateLog'
 import { DebateArena } from './DebateArena'
 import { Finding, PullRequest, FindingType, Analysis, BackendFinding } from '@/types'
 import { getFindingTypeColor, getConfidenceColor, cn } from '@/lib/utils'
+import { useDismissFinding } from '@/hooks/usePrAnalysis'
 
 interface AnalysisViewProps {
   pr: PullRequest
@@ -38,12 +42,22 @@ function FindingCard({ finding }: { finding: BackendFinding }) {
   const color = isCritical ? 'text-destructive' : isWarning ? 'text-warning' : 'text-agent-1'
 
   const isResolved = finding?.status === 'resolved'
+  const isDismissed = finding?.status === 'dismissed'
+  const dismissMutation = useDismissFinding()
+
+  const handleDismiss = async () => {
+    try {
+      await dismissMutation.mutateAsync(finding.id)
+    } catch {
+      toast.error('Failed to dismiss finding')
+    }
+  }
 
   return (
     <Card
       className={cn(
         'overflow-hidden border-border/60 bg-card/40 transition-colors hover:border-primary/30',
-        isResolved && 'opacity-60 grayscale-[0.4]'
+        (isResolved || isDismissed) && 'opacity-60 grayscale-[0.4]'
       )}
     >
       <CardHeader className="pb-4">
@@ -63,6 +77,14 @@ function FindingCard({ finding }: { finding: BackendFinding }) {
                 className="border-success/30 bg-success/15 text-[10px] font-medium text-success"
               >
                 Resolved
+              </Badge>
+            )}
+            {isDismissed && (
+              <Badge
+                variant="outline"
+                className="border-border bg-muted/40 text-[10px] font-medium text-muted-foreground"
+              >
+                Dismissed
               </Badge>
             )}
             {finding.consensus ? (
@@ -187,6 +209,23 @@ function FindingCard({ finding }: { finding: BackendFinding }) {
                 Debate log
               </Button>
             </AgentDebateLog>
+
+            {!isResolved && !isDismissed && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleDismiss}
+                disabled={dismissMutation.isPending}
+                className="h-8 gap-1.5 rounded-md text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              >
+                {dismissMutation.isPending ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <EyeOff className="h-3 w-3" />
+                )}
+                Dismiss
+              </Button>
+            )}
           </div>
         </div>
       </CardContent>

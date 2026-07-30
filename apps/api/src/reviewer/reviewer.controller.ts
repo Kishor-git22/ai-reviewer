@@ -7,6 +7,7 @@ import {
   UseGuards,
   Request,
   Patch,
+  NotFoundException,
 } from "@nestjs/common";
 import { ReviewerService } from "./reviewer.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
@@ -348,6 +349,31 @@ export class ReviewerController {
     return this.prisma.analysis.findMany({
       where: { userId: req.user.id },
       orderBy: { createdAt: "desc" },
+    });
+  }
+
+  /**
+   * Manually dismiss a finding the panel confirmed but that the user has
+   * judged not worth acting on (a false positive, or just not relevant).
+   * Deliberately a distinct status from "resolved" - resolved means the
+   * underlying issue is verifiably gone from a later commit's diff, this
+   * just means a human looked at it and doesn't want it surfaced.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Patch("finding/:id/dismiss")
+  async dismissFinding(@Request() req, @Param("id") id: string) {
+    const finding = await this.prisma.finding.findUnique({
+      where: { id },
+      include: { analysis: true },
+    });
+
+    if (!finding || finding.analysis.userId !== req.user.id) {
+      throw new NotFoundException("Finding not found");
+    }
+
+    return this.prisma.finding.update({
+      where: { id },
+      data: { status: "dismissed" },
     });
   }
 

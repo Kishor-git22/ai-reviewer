@@ -15,14 +15,20 @@ export function formatNumber(num: number): string {
   return num.toString()
 }
 
+// Confidence is "how sure is the panel", not "how bad is this" - severity
+// already owns alarm color via getFindingTypeColor. Using destructive/warning
+// hues here too made a trivial Info finding the panel was merely sure about
+// look as scary as an actual critical vulnerability. This scales by neutral
+// weight (how solid/prominent) instead of by hue, so the two axes don't
+// visually collide.
 export function getConfidenceColor(confidence: 'High' | 'Medium' | 'Low'): string {
   switch (confidence) {
     case 'High':
-      return 'text-destructive bg-destructive/10 border-destructive/20'
+      return 'text-foreground bg-accent border-border'
     case 'Medium':
-      return 'text-warning bg-warning/10 border-warning/20'
+      return 'text-muted-foreground bg-accent/50 border-border/60'
     case 'Low':
-      return 'text-agent-1 bg-agent-1/10 border-agent-1/20'
+      return 'text-muted-foreground/80 bg-transparent border-border/40'
     default:
       return 'text-muted-foreground bg-muted/40 border-border'
   }
@@ -33,7 +39,7 @@ export function getFindingTypeColor(type: string): string {
     case 'Critical':
       return 'bg-destructive/15 text-destructive'
     case 'Vulnerability':
-      return 'bg-warning/15 text-warning'
+      return 'bg-destructive/15 text-destructive'
     case 'Warning':
       return 'bg-warning/15 text-warning'
     case 'Info':

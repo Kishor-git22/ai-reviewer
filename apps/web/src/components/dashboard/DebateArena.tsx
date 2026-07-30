@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Cpu } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { NVIDIA_MODELS } from './ModelSelector'
@@ -48,20 +48,43 @@ export function DebateArena({ modelIds, prTitle, className }: DebateArenaProps) 
 
   const script = useMemo(() => buildScript(agents, prTitle), [agents, prTitle])
 
+  // Full history is kept (never truncated) so scrolling up actually shows
+  // earlier debate instead of lines that were silently discarded from state.
   const [log, setLog] = useState<Line[]>(() => [script[0]])
   const [tick, setTick] = useState(1)
+
+  const scrollRef = useRef<HTMLDivElement>(null)
+  // Sticks to the bottom for new messages by default, but stops the moment
+  // the user scrolls up to read earlier lines - re-engages once they scroll
+  // back down themselves, same as a normal chat log.
+  const stickToBottomRef = useRef(true)
 
   useEffect(() => {
     setLog([script[0]])
     setTick(1)
+    stickToBottomRef.current = true
     let i = 1
     const id = setInterval(() => {
-      setLog((prev) => [...prev, script[i % script.length]].slice(-5))
+      setLog((prev) => [...prev, script[i % script.length]])
       setTick((t) => t + 1)
       i++
     }, 2600)
     return () => clearInterval(id)
   }, [script])
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (el && stickToBottomRef.current) {
+      el.scrollTop = el.scrollHeight
+    }
+  }, [log])
+
+  const handleScroll = () => {
+    const el = scrollRef.current
+    if (!el) return
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    stickToBottomRef.current = distanceFromBottom < 48
+  }
 
   const activeSpeaker = log[log.length - 1]?.speaker ?? 0
   const nextSpeaker = (activeSpeaker + 1) % 3
@@ -95,9 +118,13 @@ export function DebateArena({ modelIds, prTitle, className }: DebateArenaProps) 
         ))}
       </div>
 
-      {/* Transcript */}
+      {/* Transcript - fixed height, scrolls so earlier debate is never lost */}
       <div className="rounded-2xl border border-border/60 bg-card/60 p-5">
-        <div className="space-y-3">
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="dashboard-scroll max-h-72 space-y-3 overflow-y-auto pr-1"
+        >
           {log.map((line, i) => (
             <div
               key={`${line.speaker}-${i}-${line.text.slice(0, 12)}`}
