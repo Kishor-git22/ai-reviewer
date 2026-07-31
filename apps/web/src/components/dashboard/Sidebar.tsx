@@ -65,9 +65,9 @@ export function DashboardSidebar({ children, defaultOpen = true }: SidebarProps)
           <div className="flex h-full flex-col gap-2">
             <div className="flex flex-1 flex-col rounded-2xl border border-border/60 bg-card shadow-lg shadow-black/20">
               <SidebarHeader className="border-b border-border/60 p-4">
-                <Link href="/" className="group-data-[collapsible=icon]:hidden">
+                <div className="group-data-[collapsible=icon]:hidden">
                   <Logo markClassName="h-8 w-8" textClassName="text-base" />
-                </Link>
+                </div>
               </SidebarHeader>
 
               <SidebarContent className="gap-0 px-2 py-3">
