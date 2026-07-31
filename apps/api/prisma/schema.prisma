@@ -55,6 +55,12 @@ model Analysis {
   models        String[] // The 3 models used
   debateLog     Json?    @map("debate_log") // Complete log of AI communication
   summary       String?
+  // Every distinct issue at least one agent raised before the >=2-agent
+  // filter, i.e. the honest denominator for a consensus-rate stat. Findings
+  // that never reach 2+ agreement are dropped before ever becoming a Finding
+  // row, so counting only saved Finding rows on both sides of that ratio is
+  // circular and always reads 100%.
+  candidateFindingsCount Int @default(0) @map("candidate_findings_count")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 

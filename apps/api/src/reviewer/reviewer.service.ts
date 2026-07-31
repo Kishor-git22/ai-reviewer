@@ -18,6 +18,12 @@ export interface AIReviewResult {
   qualityScore: number;
   securityScore: number;
   summary: string;
+  // Every distinct issue at least one agent raised, before the >=2-agent
+  // filter drops the ones nobody else corroborated. This is the honest
+  // denominator for a "consensus rate" - using confirmed-findings-saved as
+  // both numerator and denominator is circular, since only-ever-confirmed
+  // findings get saved at all, which makes that ratio 100% by construction.
+  totalCandidates?: number;
 }
 
 @Injectable()
@@ -543,6 +549,10 @@ export class ReviewerService {
           qualityScore: synthesis.qualityScore,
           securityScore: synthesis.securityScore,
           summary: synthesis.summary,
+          // From pooledCandidate (pre-judge), not synthesis - this needs to
+          // count every issue at least one agent raised, independent of
+          // whether the judge step ran or reworded/dropped some afterward.
+          candidateFindingsCount: pooledCandidate.totalCandidates ?? 0,
           debateLog: {
             agents: agentResults,
             judgeModel: this.JUDGE_MODEL,
@@ -971,6 +981,7 @@ Return your response in strict JSON format:
       qualityScore: Math.round(qualityTotal / (qualityCount || 1)),
       securityScore: Math.round(securityTotal / (securityCount || 1)),
       summary: `Consensus from ${agentCount} agent reviews across ${fileCount} files. ${findings.length} issues confirmed by multi-agent agreement.`,
+      totalCandidates: groups.length,
     };
   }
 
