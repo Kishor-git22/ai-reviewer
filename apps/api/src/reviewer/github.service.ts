@@ -217,14 +217,28 @@ export class GithubService {
           });
         }
 
-        // Resolve the GitHub conversation thread using GraphQL
+        // Resolve the GitHub conversation thread using GraphQL. There is no
+        // direct comment -> thread edge in GitHub's schema (PullRequestReviewComment
+        // has no `pullRequestReviewThread` field, despite how it reads) - the
+        // only path is comment -> review -> PR -> reviewThreads, then match
+        // the thread whose comments include this comment's databaseId.
         try {
           const query = `
             query($nodeId: ID!) {
               node(id: $nodeId) {
                 ... on PullRequestReviewComment {
-                  pullRequestReviewThread {
-                    id
+                  databaseId
+                  pullRequestReview {
+                    pullRequest {
+                      reviewThreads(first: 100) {
+                        nodes {
+                          id
+                          comments(first: 50) {
+                            nodes { databaseId }
+                          }
+                        }
+                      }
+                    }
                   }
                 }
               }
@@ -233,7 +247,12 @@ export class GithubService {
           const response: any = await octokit.graphql(query, {
             nodeId: existing.node_id,
           });
-          const threadId = response?.node?.pullRequestReviewThread?.id;
+          const threads =
+            response?.node?.pullRequestReview?.pullRequest?.reviewThreads
+              ?.nodes ?? [];
+          const threadId = threads.find((thread: any) =>
+            thread.comments.nodes.some((c: any) => c.databaseId === cId),
+          )?.id;
 
           if (threadId) {
             const mutation = `
