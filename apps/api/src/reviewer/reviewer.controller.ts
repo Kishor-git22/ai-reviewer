@@ -362,15 +362,39 @@ export class ReviewerController {
   }
 
   /**
+   * Manually mark a finding the panel confirmed as resolved - the user has
+   * checked it and considers the issue handled. Distinct from the panel's
+   * own auto-resolve (resolveOldFindings), which only fires once it can
+   * verify the issue is actually gone from a later commit's diff.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Patch("finding/:id/resolve")
+  async resolveFinding(@Request() req, @Param("id") id: string) {
+    return this.setFindingStatus(req, id, "resolved");
+  }
+
+  /**
    * Manually dismiss a finding the panel confirmed but that the user has
-   * judged not worth acting on (a false positive, or just not relevant).
-   * Deliberately a distinct status from "resolved" - resolved means the
-   * underlying issue is verifiably gone from a later commit's diff, this
-   * just means a human looked at it and doesn't want it surfaced.
+   * judged not acceptable (a false positive, or just not relevant).
    */
   @UseGuards(JwtAuthGuard)
   @Patch("finding/:id/dismiss")
   async dismissFinding(@Request() req, @Param("id") id: string) {
+    return this.setFindingStatus(req, id, "dismissed");
+  }
+
+  /**
+   * Shared logic behind resolveFinding/dismissFinding: update the finding's
+   * status, then best-effort mirror it to the GitHub comment. Mirroring
+   * shouldn't fail just because the GitHub API hiccups, so it never throws
+   * past here - same treatment as resolveOldFindings() gives its own
+   * GraphQL calls.
+   */
+  private async setFindingStatus(
+    req: any,
+    id: string,
+    status: "resolved" | "dismissed",
+  ) {
     const finding = await this.prisma.finding.findUnique({
       where: { id },
       include: { analysis: true },
@@ -382,12 +406,9 @@ export class ReviewerController {
 
     const updated = await this.prisma.finding.update({
       where: { id },
-      data: { status: "dismissed" },
+      data: { status },
     });
 
-    // Best-effort mirror to GitHub: dismissing in the app shouldn't fail
-    // just because the GitHub API hiccups, so this never throws past here -
-    // same treatment as resolveOldFindings() gives its own GraphQL calls.
     if (finding.githubCommentId) {
       try {
         const [user, repoRecord] = await Promise.all([
@@ -403,7 +424,12 @@ export class ReviewerController {
         ]);
 
         if (user?.githubToken && repoRecord?.owner) {
-          await this.githubService.markCommentAsDismissed(
+          const mirror =
+            status === "resolved"
+              ? this.githubService.markCommentAsResolved
+              : this.githubService.markCommentAsDismissed;
+          await mirror.call(
+            this.githubService,
             user.githubToken,
             repoRecord.owner,
             finding.analysis.repoName,
@@ -412,7 +438,7 @@ export class ReviewerController {
         }
       } catch (err: any) {
         this.reviewerService["logger"].error(
-          `Failed to mirror dismissal to GitHub for finding ${id}: ${err.message}`,
+          `Failed to mirror ${status} to GitHub for finding ${id}: ${err.message}`,
         );
       }
     }
