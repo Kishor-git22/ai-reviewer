@@ -1,8 +1,50 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { PullRequest, PRAnalysis, Finding, Analysis } from '@/types'
+import { PullRequest, PRAnalysis, Finding, Analysis, PublicStats, MyStats } from '@/types'
 import { useSession } from 'next-auth/react'
 
 const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002').replace(/\/$/, '')
+
+// Public, unauthenticated  used on the marketing landing page. No token
+// gating since there's no user session to gate on there. Polls on a short
+// interval and refetches on focus (overriding the app-wide
+// refetchOnWindowFocus: false default in providers.tsx) so the numbers
+// actually move while someone's watching, not just on a full reload.
+export function usePublicStats() {
+  return useQuery({
+    queryKey: ['public-stats'],
+    queryFn: async (): Promise<PublicStats> => {
+      const response = await fetch(`${API_URL}/reviewer/stats/public`)
+      if (!response.ok) throw new Error('Failed to fetch public stats')
+      return response.json()
+    },
+    staleTime: 0,
+    refetchInterval: 5 * 1000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    retry: 1,
+  })
+}
+
+// The signed-in user's own numbers, for the dashboard Overview.
+export function useMyStats() {
+  const { data: session } = useSession()
+  const token = session?.user?.accessToken
+
+  return useQuery({
+    queryKey: ['my-stats'],
+    queryFn: async (): Promise<MyStats> => {
+      const response = await fetch(`${API_URL}/reviewer/stats/me`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      if (!response.ok) throw new Error('Failed to fetch account stats')
+      return response.json()
+    },
+    enabled: !!token,
+    staleTime: 30 * 1000,
+  })
+}
 
 // Hook to fetch analysis from backend
 export function useAnalysis(id: string | null) {
@@ -142,6 +184,34 @@ export function useAnalyzePR() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['analysis'] })
+    },
+  })
+}
+
+// Hook to dismiss a confirmed finding the user has judged not worth acting
+// on (false positive, or just not relevant) - distinct from the panel
+// auto-marking a finding "resolved" once it verifies the issue is actually
+// gone from a later commit's diff.
+export function useDismissFinding() {
+  const { data: session } = useSession()
+  const token = session?.user?.accessToken
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (findingId: string) => {
+      const response = await fetch(`${API_URL}/reviewer/finding/${findingId}/dismiss`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) throw new Error('Failed to dismiss finding')
+      return response.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['analysis'] })
+      queryClient.invalidateQueries({ queryKey: ['analysis-history'] })
     },
   })
 }

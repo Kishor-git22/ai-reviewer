@@ -1,4 +1,4 @@
-import { NvidiaModel, LandingStats, Feature, Finding, PullRequest } from '@/types'
+import { NvidiaModel, Feature, Finding, PullRequest } from '@/types'
 
 export const NVIDIA_MODELS: NvidiaModel[] = [
   { id: 'meta/llama-3.1-405b', name: 'Llama 3.1 405B', provider: 'Meta' },
@@ -16,29 +16,29 @@ export const DEFAULT_SELECTED_MODELS = [
   'mistralai/mixtral-8x22b',
 ]
 
-export const LANDING_STATS: LandingStats = {
-  members: '12.4k+',
-  prsReviewed: '480k+',
-  successRate: '99.8%',
-}
-
 export const FEATURES: Feature[] = [
   {
-    title: 'Refracted Consensus',
+    title: 'Consensus, not one model’s opinion',
     description:
-      "Unlike single-model tools, we pass your code through 3 distinct AI models simultaneously. If 2+ agree, it's a confirmed issue.",
+      'A single model guessing alone is exactly how false positives happen. A finding only ever reaches you once two of your three models independently agree  the noise that makes other tools easy to tune out never gets through.',
     icon: 'layers',
   },
   {
-    title: 'Zero False Positives',
+    title: 'You see the argument, not just the verdict',
     description:
-      'Our triple-check algorithm filters out the noise common in standard static analysis tools.',
-    icon: 'shield',
+      'Every finding ships with the full transcript  what each model said, where they clashed, and how the panel landed on consensus. Nothing here asks you to just trust a black box.',
+    icon: 'debate',
   },
   {
-    title: 'NVIDIA-Powered Speed',
+    title: 'Your panel, your call',
     description:
-      "Leveraging the world's fastest inference hardware to give you feedback in seconds, not minutes.",
+      'Choose any three models to sit on the panel. You’re never locked into one vendor’s blind spots  change the lineup any time, and every review from then on reflects it.',
+    icon: 'panel',
+  },
+  {
+    title: 'Seconds, not minutes',
+    description:
+      "Runs on the fastest inference hardware available  a full three-model review lands before you've context-switched away from the PR.",
     icon: 'zap',
   },
 ]
@@ -175,7 +175,7 @@ export const MOCK_PRS: PullRequest[] = [
   {
     id: 'pr-1',
     title: 'fix: auth rotation race condition',
-    repo: 'prism-api',
+    repo: 'review-api',
     status: 'Analysis Complete',
     issues: 12,
     quality: 82,
@@ -185,7 +185,7 @@ export const MOCK_PRS: PullRequest[] = [
   {
     id: 'pr-2',
     title: 'feat: three.js mesh optimization',
-    repo: 'prism-web',
+    repo: 'review-web',
     status: 'Pending Review',
     issues: 0,
     quality: 95,
@@ -195,7 +195,7 @@ export const MOCK_PRS: PullRequest[] = [
   {
     id: 'pr-3',
     title: 'chore: update sdk dependencies',
-    repo: 'prism-api',
+    repo: 'review-api',
     status: 'Analysis Complete',
     issues: 3,
     quality: 88,
@@ -205,7 +205,7 @@ export const MOCK_PRS: PullRequest[] = [
   {
     id: 'pr-4',
     title: 'feat: implement rate limiting middleware',
-    repo: 'prism-api',
+    repo: 'review-api',
     status: 'In Progress',
     issues: 8,
     quality: 91,

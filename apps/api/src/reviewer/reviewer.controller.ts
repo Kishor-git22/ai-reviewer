@@ -7,8 +7,10 @@ import {
   UseGuards,
   Request,
   Patch,
+  NotFoundException,
 } from "@nestjs/common";
 import { ReviewerService } from "./reviewer.service";
+import { GithubService } from "./github.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PrismaService } from "../prisma/prisma.service";
 import { Octokit } from "octokit";
@@ -17,6 +19,7 @@ import { Octokit } from "octokit";
 export class ReviewerController {
   constructor(
     private readonly reviewerService: ReviewerService,
+    private readonly githubService: GithubService,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -47,6 +50,74 @@ export class ReviewerController {
       body.headSha,
       body.models,
     );
+  }
+
+  /**
+   * Public, aggregate-only numbers for the marketing landing page. No
+   * per-user data just counts and a real consensus rate, so the page
+   * never has to fall back to made-up marketing figures.
+   */
+  @Get("stats/public")
+  async getPublicStats() {
+    const [memberCount, reviewedPrGroups, totalFindings, consensusFindings] =
+      await Promise.all([
+        this.prisma.user.count(),
+        this.prisma.analysis.groupBy({
+          by: ["repoName", "prNumber"],
+          where: { status: "completed" },
+        }),
+        this.prisma.finding.count(),
+        this.prisma.finding.count({ where: { consensus: true } }),
+      ]);
+
+    return {
+      members: memberCount,
+      prsReviewed: reviewedPrGroups.length,
+      // Share of findings the panel actually agreed on the one accuracy-
+      // shaped number this system can honestly measure, since there's no
+      // ground truth to check false positives against.
+      consensusRate:
+        totalFindings > 0
+          ? Math.round((consensusFindings / totalFindings) * 1000) / 10
+          : null,
+    };
+  }
+
+  /**
+   * The signed-in user's own numbers for the dashboard Overview same
+   * shape of question as the public stats, scoped to this account instead
+   * of the whole install.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get("stats/me")
+  async getMyStats(@Request() req) {
+    const userId = req.user.id;
+
+    const [
+      activeRepoCount,
+      reviewedPrGroups,
+      totalFindings,
+      consensusFindings,
+    ] = await Promise.all([
+      this.prisma.repository.count({ where: { userId, isActive: true } }),
+      this.prisma.analysis.groupBy({
+        by: ["repoName", "prNumber"],
+        where: { userId, status: "completed" },
+      }),
+      this.prisma.finding.count({ where: { analysis: { userId } } }),
+      this.prisma.finding.count({
+        where: { analysis: { userId }, consensus: true },
+      }),
+    ]);
+
+    return {
+      activeRepos: activeRepoCount,
+      prsReviewed: reviewedPrGroups.length,
+      consensusRate:
+        totalFindings > 0
+          ? Math.round((consensusFindings / totalFindings) * 1000) / 10
+          : null,
+    };
   }
 
   @UseGuards(JwtAuthGuard)
@@ -283,6 +354,65 @@ export class ReviewerController {
     });
   }
 
+  /**
+   * Manually dismiss a finding the panel confirmed but that the user has
+   * judged not worth acting on (a false positive, or just not relevant).
+   * Deliberately a distinct status from "resolved" - resolved means the
+   * underlying issue is verifiably gone from a later commit's diff, this
+   * just means a human looked at it and doesn't want it surfaced.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Patch("finding/:id/dismiss")
+  async dismissFinding(@Request() req, @Param("id") id: string) {
+    const finding = await this.prisma.finding.findUnique({
+      where: { id },
+      include: { analysis: true },
+    });
+
+    if (!finding || finding.analysis.userId !== req.user.id) {
+      throw new NotFoundException("Finding not found");
+    }
+
+    const updated = await this.prisma.finding.update({
+      where: { id },
+      data: { status: "dismissed" },
+    });
+
+    // Best-effort mirror to GitHub: dismissing in the app shouldn't fail
+    // just because the GitHub API hiccups, so this never throws past here -
+    // same treatment as resolveOldFindings() gives its own GraphQL calls.
+    if (finding.githubCommentId) {
+      try {
+        const [user, repoRecord] = await Promise.all([
+          this.prisma.user.findUnique({
+            where: { id: finding.analysis.userId },
+          }),
+          this.prisma.repository.findFirst({
+            where: {
+              name: finding.analysis.repoName,
+              userId: finding.analysis.userId,
+            },
+          }),
+        ]);
+
+        if (user?.githubToken && repoRecord?.owner) {
+          await this.githubService.markCommentAsDismissed(
+            user.githubToken,
+            repoRecord.owner,
+            finding.analysis.repoName,
+            finding.githubCommentId,
+          );
+        }
+      } catch (err: any) {
+        this.reviewerService["logger"].error(
+          `Failed to mirror dismissal to GitHub for finding ${id}: ${err.message}`,
+        );
+      }
+    }
+
+    return updated;
+  }
+
   private mapAgentReasonings(analysis: any) {
     if (analysis && analysis.findings && analysis.debateLog) {
       const debateLog: any = analysis.debateLog;
@@ -291,7 +421,7 @@ export class ReviewerController {
           // Only consider agents that were actually attempted on this
           // finding's file (debateLog.agents has one entry per (file x
           // model) task run across the whole PR, so most entries are
-          // irrelevant to any given finding). Failed attempts are kept —
+          // irrelevant to any given finding). Failed attempts are kept
           // a selected model that errored out (rate limit, timeout) should
           // show as "didn't respond", not silently disappear as if it was
           // never part of the review.
@@ -310,7 +440,7 @@ export class ReviewerController {
           // within 5 of each other (e.g. 333 and 338) into different
           // buckets (335 vs 340) right at the boundary, silently dropping a
           // real vote and making a genuinely multi-agent finding look
-          // single-agent — that bug is why this now matches buildConsensus
+          // single-agent that bug is why this now matches buildConsensus
           // exactly instead of re-deriving its own bucket.
           for (const agent of relevantAgents) {
             const existing = byModel.get(agent.model);
@@ -333,7 +463,7 @@ export class ReviewerController {
               continue;
             }
 
-            // Not a missing check — type is excluded from this match
+            // Not a missing check type is excluded from this match
             // ON PURPOSE (see comment above). Do not add `f.type ===
             // finding.type` here; that was tried, and it broke consensus
             // detection for the exact reason explained above.
@@ -362,7 +492,7 @@ export class ReviewerController {
               });
             } else if (!existing || existing.verdict === "neutral") {
               // No fabricated constant: use this agent's own reported scores
-              // for the file as its "confidence nothing's wrong here" —
+              // for the file as its "confidence nothing's wrong here"
               // varies per model/file instead of a flat placeholder.
               const quality = content?.qualityScore;
               const security = content?.securityScore;
@@ -399,7 +529,7 @@ export class ReviewerController {
         // Only ever surface findings backed by 2+ agreeing agents. This
         // should already hold from buildConsensus()'s write-time vote
         // threshold, but the judge synthesis step (or the fuzzy-vs-exact
-        // matching above) can still leave a straggler — never display a
+        // matching above) can still leave a straggler never display a
         // single-agent finding as if it were reviewed by the panel.
         analysis.findings = analysis.findings.filter((f) => f.consensus);
       }

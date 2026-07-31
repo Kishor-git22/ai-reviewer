@@ -60,6 +60,23 @@ const config = {
           accent: 'hsl(var(--sidebar-accent))',
           'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
         },
+        success: {
+          DEFAULT: 'hsl(var(--success))',
+          foreground: 'hsl(var(--success-foreground))',
+        },
+        warning: {
+          DEFAULT: 'hsl(var(--warning))',
+          foreground: 'hsl(var(--warning-foreground))',
+        },
+        agent: {
+          1: 'hsl(var(--agent-1))',
+          2: 'hsl(var(--agent-2))',
+          3: 'hsl(var(--agent-3))',
+        },
+      },
+      fontFamily: {
+        display: ['var(--font-display)', 'ui-serif', 'Georgia', 'serif'],
+        sans: ['var(--font-sans)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
       borderRadius: {
         lg: 'var(--radius)',

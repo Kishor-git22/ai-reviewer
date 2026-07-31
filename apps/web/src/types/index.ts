@@ -4,10 +4,16 @@ export interface NvidiaModel {
   provider: string
 }
 
-export interface LandingStats {
-  members: string
-  prsReviewed: string
-  successRate: string
+export interface PublicStats {
+  members: number
+  prsReviewed: number
+  consensusRate: number | null
+}
+
+export interface MyStats {
+  activeRepos: number
+  prsReviewed: number
+  consensusRate: number | null
 }
 
 export interface Feature {
@@ -93,7 +99,7 @@ export interface BackendFinding {
   consensus: boolean
   rationale: string
   resolution: string
-  status: 'open' | 'resolved'
+  status: 'open' | 'resolved' | 'dismissed'
   models: string[]
   reference?: string
   commitSha?: string

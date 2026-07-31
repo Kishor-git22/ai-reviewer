@@ -48,45 +48,45 @@ export default function SettingsPage() {
       {/* Header Section */}
       <div className="space-y-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-inner">
-            <Sparkles className="h-6 w-6" />
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <Sparkles className="h-5 w-5" />
           </div>
-          <h1 className="text-4xl font-black tracking-tight text-foreground sm:text-5xl">
-            AI Configuration
+          <h1 className="font-display text-3xl font-medium tracking-tight text-foreground sm:text-4xl">
+            Review panel
           </h1>
         </div>
-        <p className="max-w-2xl text-lg font-bold text-muted-foreground">
-          Configure your autonomous AI team. These selected models will collaborate to review every
-          Pull Request in your activated repositories.
+        <p className="max-w-2xl text-base font-medium text-muted-foreground">
+          Choose the models that debate every pull request in your activated repositories. A finding
+          only surfaces once two of the three agree.
         </p>
       </div>
 
       {/* Feature Grid */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-        <Card className="border-border/50 bg-card/50 backdrop-blur-xl">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Card className="border-border/60 bg-card/40">
           <CardContent className="pt-6">
-            <ShieldCheck className="mb-4 h-8 w-8 text-green-400" />
-            <h3 className="text-sm font-black text-foreground">Consensus Driven</h3>
-            <p className="mt-1 text-xs font-bold text-muted-foreground">
-              Multiple perspectives ensure high precision and low false positives.
+            <ShieldCheck className="mb-4 h-6 w-6 text-success" />
+            <h3 className="text-sm font-semibold text-foreground">Consensus-driven</h3>
+            <p className="mt-1 text-xs font-medium text-muted-foreground">
+              Multiple perspectives keep precision high and false positives low.
             </p>
           </CardContent>
         </Card>
-        <Card className="border-border/50 bg-card/50 backdrop-blur-xl">
+        <Card className="border-border/60 bg-card/40">
           <CardContent className="pt-6">
-            <Zap className="mb-4 h-8 w-8 text-yellow-400" />
-            <h3 className="text-sm font-black text-foreground">Zero-Config CI</h3>
-            <p className="mt-1 text-xs font-bold text-muted-foreground">
-              Once configured, reviews happen automatically on every PR push.
+            <Zap className="mb-4 h-6 w-6 text-warning" />
+            <h3 className="text-sm font-semibold text-foreground">Zero-config CI</h3>
+            <p className="mt-1 text-xs font-medium text-muted-foreground">
+              Once set up, reviews run automatically on every push.
             </p>
           </CardContent>
         </Card>
-        <Card className="border-border/50 bg-card/50 backdrop-blur-xl">
+        <Card className="border-border/60 bg-card/40">
           <CardContent className="pt-6">
-            <MessageSquare className="mb-4 h-8 w-8 text-blue-400" />
-            <h3 className="text-sm font-black text-foreground">Agent Debate</h3>
-            <p className="mt-1 text-xs font-bold text-muted-foreground">
-              Agents interact to resolve conflicts before posting the final verdict.
+            <MessageSquare className="mb-4 h-6 w-6 text-agent-1" />
+            <h3 className="text-sm font-semibold text-foreground">Open debate</h3>
+            <p className="mt-1 text-xs font-medium text-muted-foreground">
+              Agents work through disagreements before posting a verdict.
             </p>
           </CardContent>
         </Card>
@@ -96,27 +96,27 @@ export default function SettingsPage() {
       <div className="space-y-8">
         <ModelSelector selectedModels={selectedModels} onChange={setSelectedModels} />
 
-        <div className="flex items-center justify-between rounded-[2.5rem] border border-border/50 bg-card/50 p-6 backdrop-blur-xl">
+        <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-card/40 p-6">
           <div className="hidden sm:block">
-            <p className="text-sm font-black text-foreground">
-              Selected Team: <span className="text-primary">{selectedModels.length} / 3</span>
+            <p className="text-sm font-semibold text-foreground">
+              Panel size: <span className="text-primary">{selectedModels.length} / 3</span>
             </p>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-              Exactly 3 agents required for consensus debate
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Exactly 3 agents are required to debate to consensus
             </p>
           </div>
           <Button
             size="lg"
             onClick={handleSave}
             disabled={selectedModels.length !== 3 || updateMutation.isPending}
-            className="h-14 gap-2 rounded-full px-10 text-lg font-black shadow-2xl shadow-primary/20 transition-all hover:scale-105 active:scale-95 disabled:grayscale"
+            className="h-12 gap-2 rounded-lg px-8 font-semibold transition-transform active:scale-95 disabled:grayscale"
           >
             {updateMutation.isPending ? (
               <Loader2 className="h-5 w-5 animate-spin" />
             ) : (
               <>
                 <Save className="h-5 w-5" />
-                Save AI Configuration
+                Save panel
               </>
             )}
           </Button>

@@ -1,9 +1,18 @@
 {
-  "name": "prism-monorepo",
+  "name": "ai-review-monorepo",
   "version": "1.0.0",
   "private": true,
-  "description": "Prism - AI code review platform. Monorepo containing the Next.js web app (apps/web) and the NestJS API (apps/api).",
+  "description": "AI Review - AI code review platform. Monorepo containing the Next.js web app (apps/web) and the NestJS API (apps/api).",
   "license": "MIT",
+  "author": "Kishor <https://github.com/Kishor-git22>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Kishor-git22/ai-reviewer.git"
+  },
+  "homepage": "https://github.com/Kishor-git22/ai-reviewer#readme",
+  "bugs": {
+    "url": "https://github.com/Kishor-git22/ai-reviewer/issues"
+  },
   "workspaces": [
     "apps/*"
   ],

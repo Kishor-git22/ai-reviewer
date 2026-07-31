@@ -4,32 +4,56 @@
 
 @layer base {
   :root {
-    --background: 222 47% 4%;
-    --foreground: 210 40% 98%;
-    --card: 222 47% 6%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222 47% 6%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 222 47% 4%;
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 217 33% 17%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217 33% 17%;
-    --input: 217 33% 17%;
-    --ring: 217 91% 60%;
+    /* Warm charcoal ink, not the stock slate-950/blue-black every AI template ships with */
+    --background: 30 8% 6%;
+    --foreground: 42 22% 94%;
+
+    --card: 30 9% 8%;
+    --card-foreground: 42 22% 94%;
+
+    --popover: 28 10% 7%;
+    --popover-foreground: 42 22% 94%;
+
+    /* Signal: a single warm copper accent used sparingly, not a blue/purple gradient */
+    --primary: 21 82% 56%;
+    --primary-foreground: 22 40% 9%;
+
+    --secondary: 30 8% 14%;
+    --secondary-foreground: 42 22% 94%;
+
+    --muted: 30 8% 13%;
+    --muted-foreground: 36 10% 63%;
+
+    --accent: 30 9% 16%;
+    --accent-foreground: 42 22% 94%;
+
+    --destructive: 6 58% 50%;
+    --destructive-foreground: 20 30% 96%;
+
+    --success: 140 22% 48%;
+    --success-foreground: 140 30% 95%;
+
+    --warning: 38 72% 54%;
+    --warning-foreground: 38 40% 10%;
+
+    /* Three distinct, desaturated identities for the debating agents */
+    --agent-1: 206 48% 56%;
+    --agent-2: 265 30% 62%;
+    --agent-3: 150 26% 50%;
+
+    --border: 30 10% 16%;
+    --input: 30 10% 16%;
+    --ring: 21 82% 56%;
     --radius: 0.75rem;
-    --sidebar-background: 222 47% 4%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-border: 217 33% 17%;
-    --sidebar-accent: 217 33% 17%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-ring: 217 91% 60%;
+
+    --sidebar-background: 30 9% 5%;
+    --sidebar-foreground: 42 22% 94%;
+    --sidebar-border: 30 10% 15%;
+    --sidebar-accent: 30 8% 13%;
+    --sidebar-accent-foreground: 42 22% 94%;
+    --sidebar-ring: 21 82% 56%;
+
+    --grain-opacity: 0.035;
   }
 }
 
@@ -37,12 +61,35 @@
   * {
     @apply border-border;
   }
+
+  html {
+    background-color: hsl(var(--background));
+    color-scheme: dark;
+  }
+
   body {
     @apply bg-background text-foreground;
     font-feature-settings:
       'rlig' 1,
       'calt' 1;
   }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-display), ui-serif, Georgia, serif;
+  }
+}
+
+/* Fixed film-grain overlay  cheap way to make a flat dark UI feel made, not generated */
+.grain-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 /* Custom scrollbar for dashboard */
@@ -62,4 +109,93 @@
 
 .dashboard-scroll::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--muted-foreground));
+}
+
+@keyframes view-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.view-transition {
+  animation: view-fade-in 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes talk-bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+.typing-dot {
+  animation: talk-bounce 1.1s ease-in-out infinite;
+}
+
+/* Small spinning cube badge (ModelCube)  plain CSS 3D, no WebGL */
+.cube-scene {
+  perspective: 400px;
+}
+
+.cube-3d {
+  position: relative;
+  transform-style: preserve-3d;
+  animation: cube-spin 9s linear infinite;
+}
+
+.cube-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  border: 1px solid hsl(var(--border));
+}
+
+@keyframes cube-spin {
+  from {
+    transform: rotateX(-18deg) rotateY(0deg);
+  }
+  to {
+    transform: rotateX(-18deg) rotateY(360deg);
+  }
+}
+
+/* Flip plate (LogoPlate)  turns a flat logo through 3D space */
+.plate-scene {
+  perspective: 400px;
+}
+
+.plate-3d {
+  position: relative;
+  transform-style: preserve-3d;
+  animation: plate-spin 9s linear infinite;
+}
+
+.plate-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+}
+
+.plate-face-back {
+  transform: rotateY(180deg);
+}
+
+@keyframes plate-spin {
+  from {
+    transform: rotateY(0deg);
+  }
+  to {
+    transform: rotateY(360deg);
+  }
 }

@@ -113,13 +113,59 @@ export class GithubService {
   }
 
   /**
-   * Mark an existing GitHub comment as resolved by updating its body and resolving the thread.
+   * Mark an existing GitHub comment as resolved (issue verifiably fixed in a
+   * later commit) by updating its body and resolving the review thread.
    */
   async markCommentAsResolved(
     githubToken: string,
     owner: string,
     repo: string,
     commentId: string,
+  ) {
+    return this.annotateAndResolveComment(
+      githubToken,
+      owner,
+      repo,
+      commentId,
+      "✅ **RESOLVED** (Fixed in latest commit)",
+    );
+  }
+
+  /**
+   * Mark an existing GitHub comment as dismissed - a human reviewer decided
+   * this finding isn't worth acting on (false positive, or just not
+   * relevant), as opposed to "resolved" which means the panel verified the
+   * issue is actually gone from a later commit's diff.
+   */
+  async markCommentAsDismissed(
+    githubToken: string,
+    owner: string,
+    repo: string,
+    commentId: string,
+  ) {
+    return this.annotateAndResolveComment(
+      githubToken,
+      owner,
+      repo,
+      commentId,
+      "🚫 **DISMISSED** (marked not applicable by the reviewer)",
+    );
+  }
+
+  /**
+   * Shared logic behind markCommentAsResolved/markCommentAsDismissed:
+   * prefix the comment body with a banner and strike through the original
+   * text, then resolve the underlying review thread via GraphQL. Both
+   * outcomes collapse the conversation on GitHub the same way - only the
+   * banner text differs, so the reader can tell "verified fixed" apart from
+   * "a human chose to ignore this".
+   */
+  private async annotateAndResolveComment(
+    githubToken: string,
+    owner: string,
+    repo: string,
+    commentId: string,
+    banner: string,
   ) {
     const octokit = new Octokit({ auth: githubToken });
     const cId = parseInt(commentId, 10);
@@ -131,12 +177,12 @@ export class GithubService {
           repo,
           comment_id: cId,
         });
-        if (!existing.body.includes("✅ **RESOLVED**")) {
+        if (!existing.body.includes(banner)) {
           await octokit.rest.pulls.updateReviewComment({
             owner,
             repo,
             comment_id: cId,
-            body: `✅ **RESOLVED** (Fixed in latest commit)\n\n~${existing.body.replace(/\n/g, "\n~")}~`,
+            body: `${banner}\n\n~${existing.body.replace(/\n/g, "\n~")}~`,
           });
         }
 
@@ -193,12 +239,12 @@ export class GithubService {
           repo,
           comment_id: cId,
         });
-        if (!existingIssue.body?.includes("✅ **RESOLVED**")) {
+        if (!existingIssue.body?.includes(banner)) {
           await octokit.rest.issues.updateComment({
             owner,
             repo,
             comment_id: cId,
-            body: `✅ **RESOLVED** (Fixed in latest commit)\n\n~${existingIssue.body?.replace(/\n/g, "\n~")}~`,
+            body: `${banner}\n\n~${existingIssue.body?.replace(/\n/g, "\n~")}~`,
           });
         }
       } catch (issueErr: any) {
@@ -208,7 +254,7 @@ export class GithubService {
       }
     } catch (error: any) {
       this.logger.error(
-        `Unexpected error marking comment ${commentId} as resolved: ${error.message}`,
+        `Unexpected error annotating comment ${commentId}: ${error.message}`,
       );
     }
   }
@@ -233,7 +279,7 @@ export class GithubService {
     const note = {
       none: "",
       "already-tracked":
-        "\n\n*Note: The issue(s) found were already flagged on a previous commit and are still unresolved — no new comments posted to avoid duplicates.*",
+        "\n\n*Note: The issue(s) found were already flagged on a previous commit and are still unresolved - no new comments posted to avoid duplicates.*",
       "invalid-paths":
         "\n\n*Note: Line-specific comments were withheld as they referenced files outside the current PR diff.*",
     }[reason];

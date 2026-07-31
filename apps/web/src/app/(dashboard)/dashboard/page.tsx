@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useMemo } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import {
   useAnalysis,
@@ -11,10 +11,11 @@ import {
   useUserSettings,
   useAnalysisByPr,
   useAnalysisHistory,
+  useMyStats,
 } from '@/hooks/usePrAnalysis'
 import { useRepos, useRepoPRs } from '@/hooks/useGitHub'
 import { AnalysisView } from '@/components/dashboard/AnalysisView'
-import { NVIDIA_MODELS } from '@/components/dashboard/ModelSelector'
+import { DebateArena } from '@/components/dashboard/DebateArena'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -42,49 +43,47 @@ import { PullRequest, Repository, Analysis } from '@/types'
 function RepoListItem({
   repo,
   onClick,
-  isPrismActive,
+  isReviewActive,
   onToggleActive,
 }: {
   repo: Repository
   onClick: () => void
-  isPrismActive?: boolean
+  isReviewActive?: boolean
   onToggleActive?: (e: React.MouseEvent) => void
 }) {
   return (
     <div
       onClick={onClick}
-      className="group relative flex cursor-pointer items-center justify-between rounded-2xl border border-border/50 bg-card/50 p-5 transition-all hover:border-primary/50 hover:bg-primary/5 hover:shadow-lg hover:shadow-primary/5"
+      className="group relative flex cursor-pointer items-center justify-between rounded-xl border border-border/60 bg-card/50 p-5 transition-colors hover:border-primary/40 hover:bg-card"
     >
       <div className="flex items-center gap-5">
         <div
           className={cn(
-            'flex h-12 w-12 items-center justify-center rounded-2xl transition-all group-hover:scale-110',
-            isPrismActive
-              ? 'bg-primary/20 text-primary shadow-lg shadow-primary/20'
-              : 'bg-muted text-muted-foreground'
+            'flex h-11 w-11 items-center justify-center rounded-xl transition-colors',
+            isReviewActive ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'
           )}
         >
-          {repo.private ? <Lock size={22} /> : <Globe size={22} />}
+          {repo.private ? <Lock size={20} /> : <Globe size={20} />}
         </div>
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="truncate text-lg font-black tracking-tight text-foreground transition-colors group-hover:text-primary">
+            <span className="truncate text-base font-semibold tracking-tight text-foreground transition-colors group-hover:text-primary">
               {repo.name}
             </span>
-            {isPrismActive && (
-              <Badge className="border-primary/20 bg-primary/20 text-[8px] font-black uppercase tracking-tighter text-primary">
+            {isReviewActive && (
+              <Badge className="border-primary/20 bg-primary/15 text-[9px] font-semibold uppercase tracking-wide text-primary">
                 <Zap className="mr-1 h-3 w-3 fill-primary" />
-                Prism Active
+                Review active
               </Badge>
             )}
           </div>
-          <div className="mt-1 flex items-center gap-4 text-xs font-bold text-muted-foreground">
+          <div className="mt-1 flex items-center gap-4 text-xs font-medium text-muted-foreground">
             <span className="flex items-center gap-1">
-              <Star size={14} className="text-yellow-500/50" />
+              <Star size={13} className="text-warning/70" />
               {repo.stargazers_count}
             </span>
             <span className="flex items-center gap-1">
-              <GitFork size={14} />
+              <GitFork size={13} />
               {repo.language || 'Plain Text'}
             </span>
           </div>
@@ -94,21 +93,21 @@ function RepoListItem({
       <div className="flex items-center gap-3">
         <Button
           size="sm"
-          variant={isPrismActive ? 'secondary' : 'outline'}
+          variant={isReviewActive ? 'secondary' : 'outline'}
           className={cn(
-            'h-8 rounded-full px-4 text-[10px] font-black uppercase tracking-widest transition-all',
-            !isPrismActive && 'hover:border-primary hover:bg-primary hover:text-primary-foreground'
+            'h-8 rounded-lg px-3.5 text-[11px] font-semibold transition-colors',
+            !isReviewActive && 'hover:border-primary hover:bg-primary hover:text-primary-foreground'
           )}
           onClick={(e) => {
             e.stopPropagation()
             onToggleActive?.(e)
           }}
         >
-          {isPrismActive ? 'Deactivate' : 'Activate AI'}
+          {isReviewActive ? 'Deactivate' : 'Activate review'}
         </Button>
         <ChevronRight
           className="text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary"
-          size={20}
+          size={18}
         />
       </div>
     </div>
@@ -128,51 +127,51 @@ function PRListItem({
     <div
       onClick={onClick}
       className={cn(
-        'group flex cursor-pointer items-center justify-between rounded-2xl border border-border/50 bg-card/50 p-5 transition-all hover:border-primary/50 hover:bg-primary/5',
-        isSelected && 'border-primary/50 bg-primary/5'
+        'group flex cursor-pointer items-center justify-between rounded-xl border border-border/60 bg-card/50 p-5 transition-colors hover:border-primary/40 hover:bg-card',
+        isSelected && 'border-primary/40 bg-card'
       )}
     >
       <div className="flex items-center gap-5">
         <div
           className={cn(
-            'flex h-12 w-12 items-center justify-center rounded-2xl transition-transform group-hover:scale-110',
+            'flex h-11 w-11 items-center justify-center rounded-xl',
             (pr.status as string) === 'in_progress' ||
               (pr.status as string) === 'pending' ||
               pr.status === 'In Progress'
-              ? 'bg-blue-500/10 text-blue-400'
+              ? 'bg-primary/10 text-primary'
               : (pr.status as string) === 'stopped' ||
                   (pr.status as string) === 'failed' ||
                   pr.vuls > 0
-                ? 'bg-red-500/10 text-red-400'
+                ? 'bg-destructive/10 text-destructive'
                 : (pr.status as string) === 'unreviewed' || pr.status === 'Pending Review'
-                  ? 'bg-muted/10 text-muted-foreground'
-                  : 'bg-green-500/10 text-green-400'
+                  ? 'bg-muted/40 text-muted-foreground'
+                  : 'bg-success/10 text-success'
           )}
         >
           {(pr.status as string) === 'in_progress' ||
           (pr.status as string) === 'pending' ||
           pr.status === 'In Progress' ? (
-            <Loader2 className="animate-spin" size={22} />
+            <Loader2 className="animate-spin" size={20} />
           ) : (pr.status as string) === 'stopped' ||
             (pr.status as string) === 'failed' ||
             pr.vuls > 0 ? (
-            <AlertCircle size={22} />
+            <AlertCircle size={20} />
           ) : (pr.status as string) === 'unreviewed' || pr.status === 'Pending Review' ? (
-            <GitPullRequest size={22} />
+            <GitPullRequest size={20} />
           ) : (
-            <CheckCircle2 size={22} />
+            <CheckCircle2 size={20} />
           )}
         </div>
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-lg font-black tracking-tight text-foreground transition-colors group-hover:text-primary">
+            <span className="text-base font-semibold tracking-tight text-foreground transition-colors group-hover:text-primary">
               {pr.title}
             </span>
-            <span className="text-xs font-bold text-muted-foreground">#{(pr as any).number}</span>
+            <span className="text-xs font-medium text-muted-foreground">#{(pr as any).number}</span>
           </div>
-          <div className="mt-1 flex items-center gap-3 text-xs font-bold text-muted-foreground">
+          <div className="mt-1 flex items-center gap-3 text-xs font-medium text-muted-foreground">
             <span className="flex items-center gap-1.5">
-              <div className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+              <div className="h-1.5 w-1.5 rounded-full bg-agent-1" />
               {(pr as any).user}
             </span>
             {pr.quality !== null && (
@@ -188,7 +187,7 @@ function PRListItem({
       </div>
       <ChevronRight
         className="text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary"
-        size={20}
+        size={18}
       />
     </div>
   )
@@ -199,8 +198,10 @@ export default function DashboardPage() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  const [selectedRepo, setSelectedRepo] = useState<Repository | null>(null)
-  const [selectedPr, setSelectedPr] = useState<PullRequest | null>(null)
+  const ownerParam = searchParams.get('owner')
+  const repoParam = searchParams.get('repo')
+  const prParam = searchParams.get('pr')
+
   const { data: userSettings } = useUserSettings()
   const selectedModels = userSettings?.selectedModels || [
     'llama-3.1',
@@ -208,17 +209,31 @@ export default function DashboardPage() {
     'nemotron-3-super',
   ]
 
-  const [showModelSelection, setShowModelSelection] = useState(false)
-
-  const { data: repos, isLoading: isReposLoading, refetch: refetchRepos } = useRepos()
+  const { data: repos, isLoading: isReposLoading } = useRepos()
   const { data: activeRepos } = useActiveRepos()
+  const { data: myStats, isLoading: isMyStatsLoading } = useMyStats()
   const registerMutation = useRegisterWebhook()
 
-  const {
-    data: prs,
-    isLoading: isPrsLoading,
-    refetch: refetchPrs,
-  } = useRepoPRs(selectedRepo?.owner.login, selectedRepo?.name)
+  // Selection is derived straight from the URL + already-loaded data, not
+  // useState. It used to be state that a click handler set directly *and*
+  // a separate useEffect re-derived from the URL on every change  those
+  // two paths raced each other on every click, each one re-triggering the
+  // PR/analysis queries a beat apart. That's what caused the double API
+  // calls and the flicker when selecting a repo or PR.
+  const selectedRepo = useMemo(() => {
+    if (!ownerParam || !repoParam || !repos) return null
+    return repos.find((r) => r.owner.login === ownerParam && r.name === repoParam) ?? null
+  }, [repos, ownerParam, repoParam])
+
+  const { data: prs, isLoading: isPrsLoading } = useRepoPRs(
+    selectedRepo?.owner.login,
+    selectedRepo?.name
+  )
+
+  const selectedPr = useMemo(() => {
+    if (!prParam || !prs) return null
+    return prs.find((p) => (p as any).number.toString() === prParam) ?? null
+  }, [prs, prParam])
 
   const { data: prAnalysis, isLoading: isPrAnalysisLoading } = useAnalysisByPr(
     selectedRepo?.name,
@@ -228,35 +243,6 @@ export default function DashboardPage() {
     selectedRepo?.name,
     selectedPr ? (selectedPr as any).number : undefined
   )
-
-  // Rehydrate state from URL on load/refresh/back-navigation
-  useEffect(() => {
-    const owner = searchParams.get('owner')
-    const repoName = searchParams.get('repo')
-    const prNumber = searchParams.get('pr')
-
-    // Handle Repo Selection
-    if (!owner || !repoName) {
-      if (selectedRepo) setSelectedRepo(null)
-    } else if (
-      repos &&
-      (!selectedRepo || selectedRepo.name !== repoName || selectedRepo.owner.login !== owner)
-    ) {
-      const repo = repos.find((r) => r.owner.login === owner && r.name === repoName)
-      if (repo) setSelectedRepo(repo)
-    }
-
-    // Handle PR Selection
-    if (!prNumber) {
-      if (selectedPr) {
-        setSelectedPr(null)
-        setShowModelSelection(false)
-      }
-    } else if (prs && (!selectedPr || (selectedPr as any).number.toString() !== prNumber)) {
-      const pr = prs.find((p) => (p as any).number.toString() === prNumber)
-      if (pr) setSelectedPr(pr)
-    }
-  }, [repos, prs, searchParams, selectedRepo, selectedPr])
 
   const analyzeMutation = useAnalyzePR()
   const unregisterMutation = useUnregisterWebhook()
@@ -275,7 +261,7 @@ export default function DashboardPage() {
         })
       }
     } catch (error) {
-      console.error('Failed to toggle Prism active state:', error)
+      console.error('Failed to toggle review active state:', error)
     }
   }
 
@@ -290,14 +276,10 @@ export default function DashboardPage() {
   }
 
   const handleRepoClick = (repo: Repository) => {
-    setSelectedRepo(repo)
-    setShowModelSelection(false)
     updateUrl(repo.owner.login, repo.name)
   }
 
   const handlePrClick = (pr: PullRequest) => {
-    setSelectedPr(pr)
-    setShowModelSelection(true)
     updateUrl(selectedRepo?.owner.login, selectedRepo?.name, (pr as any).number.toString())
   }
 
@@ -313,29 +295,31 @@ export default function DashboardPage() {
         models: selectedModels,
         headSha: (selectedPr as any).headSha,
       })
-      setShowModelSelection(false)
     } catch (error) {
       console.error('Failed to start analysis:', error)
     }
   }
 
   const handleBackToRepos = () => {
-    setSelectedRepo(null)
-    setSelectedPr(null)
-    setShowModelSelection(false)
     updateUrl()
   }
 
   const handleBackToPrs = () => {
-    setSelectedPr(null)
-    setShowModelSelection(false)
     updateUrl(selectedRepo?.owner.login, selectedRepo?.name)
   }
+
+  // Distinct key per view so the content fades in fresh instead of the
+  // abrupt DOM swap that read as a "flicker" between repos / PRs / review.
+  const viewKey = selectedPr
+    ? `pr-${(selectedPr as any).number}`
+    : selectedRepo
+      ? selectedRepo.id
+      : 'repos'
 
   return (
     <div className="flex min-h-full flex-col">
       {/* Page Header */}
-      <div className="flex flex-col gap-4 border-b border-border/50 bg-background/50 px-4 py-8 backdrop-blur-md sm:flex-row sm:items-center sm:justify-between sm:px-10">
+      <div className="flex flex-col gap-4 border-b border-border/60 bg-background/50 px-4 py-8 backdrop-blur-md sm:flex-row sm:items-center sm:justify-between sm:px-10">
         <div className="space-y-1">
           <div className="flex items-center gap-3">
             {(selectedRepo || selectedPr) && (
@@ -348,78 +332,90 @@ export default function DashboardPage() {
                 <ChevronRight className="rotate-180" size={18} />
               </Button>
             )}
-            <h1 className="text-4xl font-black tracking-tight text-foreground">
+            <h1 className="font-display text-3xl font-medium tracking-tight text-foreground">
               {selectedPr && prAnalysis?.status
-                ? 'AI Review'
+                ? 'Review'
                 : selectedPr
-                  ? 'Setup Review'
+                  ? 'Set up review'
                   : selectedRepo
-                    ? 'Pull Requests'
+                    ? 'Pull requests'
                     : 'Overview'}
             </h1>
           </div>
-          <p className="text-sm font-bold text-muted-foreground">
+          <p className="text-sm font-medium text-muted-foreground">
             {selectedPr
               ? prAnalysis?.status === 'completed'
-                ? `Comprehensive analysis for PR #${(selectedPr as any)?.number || searchParams.get('pr')}`
+                ? `Full analysis for PR #${(selectedPr as any)?.number || searchParams.get('pr')}`
                 : prAnalysis?.status === 'stopped'
                   ? `Analysis stopped for PR #${(selectedPr as any)?.number || searchParams.get('pr')}`
                   : prAnalysis?.status === 'failed'
                     ? `Analysis failed for PR #${(selectedPr as any)?.number || searchParams.get('pr')}`
                     : prAnalysis?.status === 'in_progress' || prAnalysis?.status === 'pending'
-                      ? `Multi-agent debate in progress for #${(selectedPr as any)?.number || searchParams.get('pr')}`
-                      : 'Configure your AI agents for this review.'
+                      ? `The panel is debating #${(selectedPr as any)?.number || searchParams.get('pr')}`
+                      : 'Choose which models review this change.'
               : selectedRepo
-                ? `Active PRs for ${selectedRepo.full_name}`
-                : 'Select a repository to begin analysis.'}
+                ? `Open PRs for ${selectedRepo.full_name}`
+                : 'Select a repository to begin.'}
           </p>
         </div>
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 p-4 sm:p-10">
+      <div key={viewKey} className="view-transition flex-1 p-4 sm:p-10">
         {selectedPr ? (
           isPrAnalysisLoading ? (
             <div className="flex h-full flex-col items-center justify-center space-y-8 py-20">
-              <Loader2 className="h-12 w-12 animate-spin text-primary" />
+              <Loader2 className="h-10 w-10 animate-spin text-primary" />
             </div>
           ) : prAnalysis?.status === 'failed' ? (
             <div className="flex h-full flex-col items-center justify-center space-y-8 py-20 text-center">
-              <div className="rounded-full border border-red-500/20 bg-red-500/10 p-6 text-red-500 shadow-2xl shadow-red-500/10">
-                <AlertCircle size={48} />
+              <div className="rounded-2xl border border-destructive/20 bg-destructive/10 p-6 text-destructive">
+                <AlertCircle size={40} />
               </div>
               <div className="space-y-2">
-                <h2 className="text-2xl font-black text-foreground">Analysis Failed</h2>
-                <p className="max-w-md text-sm font-bold text-muted-foreground">
-                  The AI agents encountered an error while processing this Pull Request. This can
-                  happen with extremely large diffs or API timeouts.
+                <h2 className="font-display text-xl font-medium text-foreground">
+                  Analysis failed
+                </h2>
+                <p className="max-w-md text-sm font-medium text-muted-foreground">
+                  The review panel hit an error while processing this pull request. This can happen
+                  with very large diffs or an API timeout.
                 </p>
               </div>
               <Button
-                onClick={() => setShowModelSelection(true)}
+                onClick={handleStartAnalysis}
+                disabled={analyzeMutation.isPending}
                 variant="outline"
-                className="h-12 rounded-full border-primary/20 px-8 font-black transition-all hover:bg-primary/5"
+                className="h-11 rounded-lg border-primary/30 px-6 font-semibold hover:bg-primary/5"
               >
-                Retry Analysis
+                {analyzeMutation.isPending ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Retrying...
+                  </span>
+                ) : (
+                  'Retry analysis'
+                )}
               </Button>
             </div>
           ) : prAnalysis?.status === 'stopped' ? (
             <div className="flex h-full flex-col items-center justify-center space-y-8 py-20 text-center">
-              <div className="rounded-full border border-red-500/20 bg-red-500/10 p-6 text-red-500 shadow-2xl shadow-red-500/10">
-                <AlertCircle size={48} />
+              <div className="rounded-2xl border border-destructive/20 bg-destructive/10 p-6 text-destructive">
+                <AlertCircle size={40} />
               </div>
               <div className="space-y-2">
-                <h2 className="text-2xl font-black text-foreground">Analysis Stopped</h2>
-                <p className="max-w-md text-sm font-bold text-muted-foreground">
-                  The AI analysis has been stopped because the pull request has been closed.
+                <h2 className="font-display text-xl font-medium text-foreground">
+                  Analysis stopped
+                </h2>
+                <p className="max-w-md text-sm font-medium text-muted-foreground">
+                  The review was stopped because this pull request has been closed.
                 </p>
               </div>
               <Button
                 onClick={handleBackToPrs}
                 variant="outline"
-                className="h-12 rounded-full border-primary/20 px-8 font-black transition-all hover:bg-primary/5"
+                className="h-11 rounded-lg border-primary/30 px-6 font-semibold hover:bg-primary/5"
               >
-                Back to Pull Requests
+                Back to pull requests
               </Button>
             </div>
           ) : prAnalysis?.status === 'completed' ||
@@ -433,62 +429,44 @@ export default function DashboardPage() {
               onBack={handleBackToPrs}
             />
           ) : prAnalysis?.status === 'in_progress' || prAnalysis?.status === 'pending' ? (
-            <div className="flex h-full flex-col items-center justify-center space-y-8 py-20">
-              <div className="relative">
-                <div className="absolute -inset-4 animate-pulse rounded-full bg-primary/20 blur-xl" />
-                <div className="relative flex h-24 w-24 items-center justify-center rounded-3xl border-2 border-primary bg-card shadow-2xl shadow-primary/20">
-                  <Loader2 className="h-12 w-12 animate-spin text-primary" />
-                </div>
-              </div>
-              <div className="max-w-md space-y-3 text-center">
-                <h2 className="text-2xl font-black text-foreground">Multi-Agent Debate</h2>
-                <p className="text-sm font-bold text-muted-foreground">
-                  Your selected agents are communicating and building consensus on this code change.
-                  This may take up to a minute.
+            <div className="flex h-full flex-col items-center justify-center space-y-8 py-16">
+              <div className="max-w-md space-y-2 text-center">
+                <h2 className="font-display text-xl font-medium text-foreground">
+                  The panel is reviewing your change
+                </h2>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Three independent models are reading the diff and debating what matters. This
+                  usually takes under a minute.
                 </p>
               </div>
-              <div className="grid w-full max-w-sm grid-cols-1 gap-3">
-                {selectedModels.map((mid: string) => {
-                  const m = NVIDIA_MODELS.find((x) => x.id === mid)
-                  return (
-                    <div
-                      key={mid}
-                      className="flex items-center gap-3 rounded-2xl border border-border/50 bg-card/50 p-4"
-                    >
-                      <div className="h-2 w-2 animate-pulse rounded-full bg-primary" />
-                      <span className="text-sm font-bold">{m?.name} is reviewing...</span>
-                    </div>
-                  )
-                })}
-              </div>
+              <DebateArena modelIds={selectedModels} prTitle={selectedPr.title} />
             </div>
           ) : (
             <div className="flex h-full flex-col items-center justify-center space-y-8 py-20">
-              <div className="relative">
-                <div className="absolute -inset-4 rounded-full bg-muted/20 blur-xl" />
-                <div className="relative flex h-24 w-24 items-center justify-center rounded-3xl border-2 border-muted bg-card shadow-lg">
-                  <Cpu className="h-12 w-12 text-muted-foreground" />
-                </div>
+              <div className="flex h-20 w-20 items-center justify-center rounded-2xl border border-border/60 bg-card">
+                <Cpu className="h-9 w-9 text-muted-foreground" />
               </div>
               <div className="max-w-md space-y-6 text-center">
                 <div className="space-y-3">
-                  <h2 className="text-2xl font-black text-foreground">No AI Analysis Found</h2>
-                  <p className="text-sm font-bold text-muted-foreground">
-                    AI Analysis is not done for this pull request.
+                  <h2 className="font-display text-xl font-medium text-foreground">
+                    No review yet
+                  </h2>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    This pull request hasn&apos;t been reviewed by the panel yet.
                   </p>
                 </div>
                 <Button
                   onClick={handleStartAnalysis}
                   disabled={analyzeMutation.isPending}
-                  className="h-12 rounded-full px-8 font-black shadow-lg transition-all hover:shadow-primary/25"
+                  className="h-11 rounded-lg px-6 font-semibold"
                 >
                   {analyzeMutation.isPending ? (
                     <span className="flex items-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Starting Analysis...
+                      Starting review...
                     </span>
                   ) : (
-                    'Start AI Analysis'
+                    'Start review'
                   )}
                 </Button>
               </div>
@@ -496,27 +474,72 @@ export default function DashboardPage() {
           )
         ) : (
           <div className="mx-auto max-w-7xl space-y-12">
-            {/* ... stats grid same as before ... */}
+            {!selectedRepo && (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <Card className="border-border/60 bg-card/40">
+                  <CardContent className="p-5">
+                    {isMyStatsLoading ? (
+                      <div className="h-8 w-12 animate-pulse rounded bg-accent/40" />
+                    ) : (
+                      <div className="text-2xl font-semibold text-primary">
+                        {myStats?.activeRepos ?? 0}
+                      </div>
+                    )}
+                    <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Active repositories
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="border-border/60 bg-card/40">
+                  <CardContent className="p-5">
+                    {isMyStatsLoading ? (
+                      <div className="h-8 w-12 animate-pulse rounded bg-accent/40" />
+                    ) : (
+                      <div className="text-2xl font-semibold text-agent-1">
+                        {myStats?.prsReviewed ?? 0}
+                      </div>
+                    )}
+                    <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Pull requests reviewed
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="border-border/60 bg-card/40">
+                  <CardContent className="p-5">
+                    {isMyStatsLoading ? (
+                      <div className="h-8 w-12 animate-pulse rounded bg-accent/40" />
+                    ) : (
+                      <div className="text-2xl font-semibold text-success">
+                        {myStats?.consensusRate != null ? `${myStats.consensusRate}%` : ''}
+                      </div>
+                    )}
+                    <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Panel agreement
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
 
             <div className="space-y-8">
               <div className="flex items-center justify-between px-2">
-                <h2 className="text-2xl font-black tracking-tight text-foreground">
-                  {selectedRepo ? 'Select a Pull Request' : 'Your Repositories'}
+                <h2 className="font-display text-xl font-medium tracking-tight text-foreground">
+                  {selectedRepo ? 'Select a pull request' : 'Your repositories'}
                 </h2>
-                <Badge variant="secondary" className="rounded-full px-4 py-1 font-black shadow-lg">
-                  {(selectedRepo ? prs?.length : repos?.length) || 0} Total
+                <Badge variant="secondary" className="rounded-md px-3 py-1 font-semibold">
+                  {(selectedRepo ? prs?.length : repos?.length) || 0} total
                 </Badge>
               </div>
 
               {(selectedRepo ? isPrsLoading : isReposLoading) ? (
-                <div className="flex flex-col gap-6">
+                <div className="flex flex-col gap-4">
                   {[...Array(6)].map((_, i) => (
-                    <div key={i} className="h-28 animate-pulse rounded-[2rem] bg-accent/30" />
+                    <div key={i} className="h-24 animate-pulse rounded-xl bg-accent/30" />
                   ))}
                 </div>
               ) : selectedRepo ? (
                 prs?.length ? (
-                  <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     {prs.map((pr) => (
                       <PRListItem
                         key={pr.id}
@@ -527,18 +550,18 @@ export default function DashboardPage() {
                     ))}
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center justify-center rounded-[3rem] border-2 border-dashed border-border/50 bg-accent/5 py-24 text-center">
-                    <div className="mb-6 rounded-[2rem] bg-accent p-6 shadow-inner">
-                      <GitPullRequest size={48} className="text-muted-foreground" />
+                  <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border/60 bg-accent/5 py-24 text-center">
+                    <div className="mb-6 rounded-2xl bg-accent p-6">
+                      <GitPullRequest size={40} className="text-muted-foreground" />
                     </div>
-                    <p className="text-xl font-black text-foreground">No Pull Requests Found</p>
-                    <p className="mt-2 font-bold text-muted-foreground">
+                    <p className="text-lg font-semibold text-foreground">No pull requests found</p>
+                    <p className="mt-2 font-medium text-muted-foreground">
                       This repository doesn&apos;t have any open or closed PRs yet.
                     </p>
                   </div>
                 )
               ) : repos?.length ? (
-                <div className="flex flex-col gap-6">
+                <div className="flex flex-col gap-4">
                   {repos.map((repo) => {
                     const isActive = activeRepos?.some(
                       (ar: any) => ar.name === repo.name && ar.owner === repo.owner.login
@@ -547,7 +570,7 @@ export default function DashboardPage() {
                       <RepoListItem
                         key={repo.id}
                         repo={repo}
-                        isPrismActive={isActive}
+                        isReviewActive={isActive}
                         onToggleActive={() => handleToggleActive(repo)}
                         onClick={() => handleRepoClick(repo)}
                       />
@@ -555,12 +578,12 @@ export default function DashboardPage() {
                   })}
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center rounded-[3rem] border-2 border-dashed border-border/50 bg-accent/5 py-24 text-center">
-                  <div className="mb-6 rounded-[2rem] bg-accent p-6 shadow-inner">
-                    <Globe size={48} className="text-muted-foreground" />
+                <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border/60 bg-accent/5 py-24 text-center">
+                  <div className="mb-6 rounded-2xl bg-accent p-6">
+                    <Globe size={40} className="text-muted-foreground" />
                   </div>
-                  <p className="text-xl font-black text-foreground">No Repositories Found</p>
-                  <p className="mt-2 font-bold text-muted-foreground">
+                  <p className="text-lg font-semibold text-foreground">No repositories found</p>
+                  <p className="mt-2 font-medium text-muted-foreground">
                     We couldn&apos;t find any repositories in your GitHub account.
                   </p>
                 </div>
