@@ -59,7 +59,7 @@ export class ReviewerController {
    */
   @Get("stats/public")
   async getPublicStats() {
-    const [memberCount, reviewedPrGroups, totalFindings, consensusFindings] =
+    const [memberCount, reviewedPrGroups, confirmedFindings, candidateAgg] =
       await Promise.all([
         this.prisma.user.count(),
         this.prisma.analysis.groupBy({
@@ -67,18 +67,26 @@ export class ReviewerController {
           where: { status: "completed" },
         }),
         this.prisma.finding.count(),
-        this.prisma.finding.count({ where: { consensus: true } }),
+        this.prisma.analysis.aggregate({
+          where: { status: "completed" },
+          _sum: { candidateFindingsCount: true },
+        }),
       ]);
+
+    const totalCandidates = candidateAgg._sum.candidateFindingsCount || 0;
 
     return {
       members: memberCount,
       prsReviewed: reviewedPrGroups.length,
-      // Share of findings the panel actually agreed on the one accuracy-
-      // shaped number this system can honestly measure, since there's no
-      // ground truth to check false positives against.
+      // Share of every issue at least one agent raised that actually reached
+      // 2+-agent agreement - the one accuracy-shaped number this system can
+      // honestly measure, since there's no ground truth to check false
+      // positives against. Deliberately NOT confirmedFindings / itself:
+      // findings that never reach consensus are dropped before a Finding
+      // row ever exists, so that ratio is circular and always reads 100%.
       consensusRate:
-        totalFindings > 0
-          ? Math.round((consensusFindings / totalFindings) * 1000) / 10
+        totalCandidates > 0
+          ? Math.round((confirmedFindings / totalCandidates) * 1000) / 10
           : null,
     };
   }
@@ -93,29 +101,28 @@ export class ReviewerController {
   async getMyStats(@Request() req) {
     const userId = req.user.id;
 
-    const [
-      activeRepoCount,
-      reviewedPrGroups,
-      totalFindings,
-      consensusFindings,
-    ] = await Promise.all([
-      this.prisma.repository.count({ where: { userId, isActive: true } }),
-      this.prisma.analysis.groupBy({
-        by: ["repoName", "prNumber"],
-        where: { userId, status: "completed" },
-      }),
-      this.prisma.finding.count({ where: { analysis: { userId } } }),
-      this.prisma.finding.count({
-        where: { analysis: { userId }, consensus: true },
-      }),
-    ]);
+    const [activeRepoCount, reviewedPrGroups, confirmedFindings, candidateAgg] =
+      await Promise.all([
+        this.prisma.repository.count({ where: { userId, isActive: true } }),
+        this.prisma.analysis.groupBy({
+          by: ["repoName", "prNumber"],
+          where: { userId, status: "completed" },
+        }),
+        this.prisma.finding.count({ where: { analysis: { userId } } }),
+        this.prisma.analysis.aggregate({
+          where: { userId, status: "completed" },
+          _sum: { candidateFindingsCount: true },
+        }),
+      ]);
+
+    const totalCandidates = candidateAgg._sum.candidateFindingsCount || 0;
 
     return {
       activeRepos: activeRepoCount,
       prsReviewed: reviewedPrGroups.length,
       consensusRate:
-        totalFindings > 0
-          ? Math.round((consensusFindings / totalFindings) * 1000) / 10
+        totalCandidates > 0
+          ? Math.round((confirmedFindings / totalCandidates) * 1000) / 10
           : null,
     };
   }
