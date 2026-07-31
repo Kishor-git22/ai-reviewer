@@ -9,6 +9,25 @@ export class GithubService {
   constructor(private readonly configService: ConfigService) {}
 
   /**
+   * A marker invisible when rendered (HTML comment) but present verbatim in
+   * the raw body GitHub returns, so a finding can be matched back to its own
+   * comment by an exact string instead of guessing from path/line/type -
+   * that fuzzy match was failing almost every time in practice (line numbers
+   * shift between what was submitted and what listCommentsForReview
+   * returns, and two findings of the same type on the same file are
+   * ambiguous under it), which meant githubCommentId went unset for the
+   * finding, and every later "mark as resolved/dismissed" call had nothing
+   * to update.
+   */
+  private findingMarker(findingId: string): string {
+    return `<!-- ai-review-finding-id:${findingId} -->`;
+  }
+
+  private buildFindingBody(finding: any, headSha: string): string {
+    return `### AI Finding: ${finding.type}\n**Issue:** ${finding.issue}\n\n**Rationale:** ${finding.rationale}\n\n**Suggested Resolution:**\n\`\`\`\n${finding.resolution}\n\`\`\`\n\n---\n*Detected in commit ${headSha.substring(0, 7)} at ${new Date().toLocaleString()}*\n${this.findingMarker(finding.id)}`;
+  }
+
+  /**
    * Post analysis findings as comments on a GitHub Pull Request
    */
   async postComments(
@@ -39,7 +58,7 @@ export class GithubService {
         comments: findings.map((finding) => ({
           path: finding.file,
           line: finding.line,
-          body: `### AI Finding: ${finding.type}\n**Issue:** ${finding.issue}\n\n**Rationale:** ${finding.rationale}\n\n**Suggested Resolution:**\n\`\`\`\n${finding.resolution}\n\`\`\`\n\n---\n*Detected in commit ${headSha.substring(0, 7)} at ${new Date().toLocaleString()}*`,
+          body: this.buildFindingBody(finding, headSha),
         })),
       });
 
@@ -51,16 +70,17 @@ export class GithubService {
         review_id: review.data.id,
       });
 
-      // Match them back to our findings based on path, line, and a snippet of the body
+      // Match on the exact hidden marker, not path/line/type - see
+      // findingMarker() for why the old fuzzy match was unreliable.
       for (const finding of findings) {
-        const match = reviewComments.data.find(
-          (c) =>
-            c.path === finding.file &&
-            (c.line === finding.line || c.original_line === finding.line) &&
-            c.body.includes(finding.type),
-        );
+        const marker = this.findingMarker(finding.id);
+        const match = reviewComments.data.find((c) => c.body.includes(marker));
         if (match) {
           commentIds[finding.id] = match.id.toString();
+        } else {
+          this.logger.warn(
+            `Could not find posted comment for finding ${finding.id} (${finding.file}:${finding.line}) after batch review creation.`,
+          );
         }
       }
     } catch (error: any) {
@@ -75,7 +95,7 @@ export class GithubService {
             repo,
             pull_number: prNumber,
             commit_id: headSha,
-            body: `### AI Finding: ${finding.type}\n**Issue:** ${finding.issue}\n\n**Rationale:** ${finding.rationale}\n\n**Suggested Resolution:**\n\`\`\`\n${finding.resolution}\n\`\`\`\n\n---\n*Detected in commit ${headSha.substring(0, 7)} at ${new Date().toLocaleString()}*`,
+            body: this.buildFindingBody(finding, headSha),
             path: finding.file,
             line: finding.line,
           });
@@ -89,7 +109,7 @@ export class GithubService {
               owner,
               repo,
               issue_number: prNumber,
-              body: `### AI Finding: ${finding.type} (in \`${finding.file}\` at line ${finding.line})\n**Issue:** ${finding.issue}\n\n**Rationale:** ${finding.rationale}\n\n**Suggested Resolution:**\n\`\`\`\n${finding.resolution}\n\`\`\`\n\n---\n*Detected in commit ${headSha.substring(0, 7)}*`,
+              body: `### AI Finding: ${finding.type} (in \`${finding.file}\` at line ${finding.line})\n**Issue:** ${finding.issue}\n\n**Rationale:** ${finding.rationale}\n\n**Suggested Resolution:**\n\`\`\`\n${finding.resolution}\n\`\`\`\n\n---\n*Detected in commit ${headSha.substring(0, 7)}*\n${this.findingMarker(finding.id)}`,
             });
             commentIds[finding.id] = issueComment.data.id.toString();
           } catch (issueError: any) {
