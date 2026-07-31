@@ -526,6 +526,13 @@ export class ReviewerService {
           reference: f.reference,
           commitSha: headSha,
           models: selectedModels,
+          // Every finding reaching this point already passed buildConsensus()'s
+          // >=2-distinct-agent filter (the judge step above can only drop or
+          // refine those candidates, never introduce a fresh single-agent
+          // one) - this field was never actually being set, so it silently
+          // defaulted to false on every row ever created, which is why
+          // "consensus rate" stats read 0% regardless of real activity.
+          consensus: true,
         })),
       });
 
