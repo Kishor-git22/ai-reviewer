@@ -2,6 +2,7 @@
 
 import {
   ChevronRight,
+  ChevronDown,
   CheckCircle2,
   AlertCircle,
   ExternalLink,
@@ -21,11 +22,17 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { AgentDebateLog } from './AgentDebateLog'
 import { DebateArena } from './DebateArena'
 import { Finding, PullRequest, FindingType, Analysis, BackendFinding } from '@/types'
 import { getFindingTypeColor, getConfidenceColor, cn } from '@/lib/utils'
-import { useDismissFinding } from '@/hooks/usePrAnalysis'
+import { useDismissFinding, useResolveFinding } from '@/hooks/usePrAnalysis'
 
 interface AnalysisViewProps {
   pr: PullRequest
@@ -43,7 +50,17 @@ function FindingCard({ finding }: { finding: BackendFinding }) {
 
   const isResolved = finding?.status === 'resolved'
   const isDismissed = finding?.status === 'dismissed'
+  const resolveMutation = useResolveFinding()
   const dismissMutation = useDismissFinding()
+  const isPending = resolveMutation.isPending || dismissMutation.isPending
+
+  const handleResolve = async () => {
+    try {
+      await resolveMutation.mutateAsync(finding.id)
+    } catch {
+      toast.error('Failed to resolve finding')
+    }
+  }
 
   const handleDismiss = async () => {
     try {
@@ -84,7 +101,7 @@ function FindingCard({ finding }: { finding: BackendFinding }) {
                 variant="outline"
                 className="border-border bg-muted/40 text-[10px] font-medium text-muted-foreground"
               >
-                Dismissed
+                Not Acceptable
               </Badge>
             )}
             {finding.consensus ? (
@@ -211,20 +228,39 @@ function FindingCard({ finding }: { finding: BackendFinding }) {
             </AgentDebateLog>
 
             {!isResolved && !isDismissed && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleDismiss}
-                disabled={dismissMutation.isPending}
-                className="h-8 gap-1.5 rounded-md text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-              >
-                {dismissMutation.isPending ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <EyeOff className="h-3 w-3" />
-                )}
-                Dismiss
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={isPending}
+                    className="h-8 gap-1.5 rounded-md text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:bg-accent"
+                  >
+                    {isPending ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <ChevronDown className="h-3 w-3" />
+                    )}
+                    Review
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={handleResolve}
+                    className="text-success focus:bg-success/10 focus:text-success"
+                  >
+                    <CheckCircle2 className="mr-2 h-3.5 w-3.5" />
+                    Resolved
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={handleDismiss}
+                    className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                  >
+                    <EyeOff className="mr-2 h-3.5 w-3.5" />
+                    Not Acceptable
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
         </div>

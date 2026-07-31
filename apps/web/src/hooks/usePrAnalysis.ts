@@ -188,10 +188,36 @@ export function useAnalyzePR() {
   })
 }
 
-// Hook to dismiss a confirmed finding the user has judged not worth acting
-// on (false positive, or just not relevant) - distinct from the panel
-// auto-marking a finding "resolved" once it verifies the issue is actually
+// Hook to manually mark a confirmed finding as resolved (the user has
+// checked it and considers the issue handled) - distinct from the panel's
+// own auto-resolve, which only fires once it verifies the issue is actually
 // gone from a later commit's diff.
+export function useResolveFinding() {
+  const { data: session } = useSession()
+  const token = session?.user?.accessToken
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (findingId: string) => {
+      const response = await fetch(`${API_URL}/reviewer/finding/${findingId}/resolve`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) throw new Error('Failed to resolve finding')
+      return response.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['analysis'] })
+      queryClient.invalidateQueries({ queryKey: ['analysis-history'] })
+    },
+  })
+}
+
+// Hook to dismiss a confirmed finding the user has judged not acceptable
+// (false positive, or just not relevant).
 export function useDismissFinding() {
   const { data: session } = useSession()
   const token = session?.user?.accessToken

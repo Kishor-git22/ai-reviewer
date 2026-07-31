@@ -147,7 +147,7 @@ export class GithubService {
       owner,
       repo,
       commentId,
-      "✅ **RESOLVED** (Fixed in latest commit)",
+      "✅ **Resolved** - the issue is resolved.",
     );
   }
 
@@ -168,17 +168,28 @@ export class GithubService {
       owner,
       repo,
       commentId,
-      "🚫 **DISMISSED** (marked not applicable by the reviewer)",
+      "🚫 **Not Acceptable** - this finding is not acceptable.",
     );
   }
 
   /**
+   * Prefixes a comment body with a clean banner and tucks the original
+   * finding text into a collapsed <details> block, rather than the previous
+   * approach (wrapping the whole body in single tildes to "strike it
+   * through") which rendered as a wall of literal `~` characters - GFM
+   * strikethrough needs a `~~pair~~` on the same line, and doesn't work
+   * across the multi-paragraph finding body at all.
+   */
+  private buildAnnotatedBody(originalBody: string, banner: string): string {
+    return `${banner}\n\n<details>\n<summary>Original finding</summary>\n\n${originalBody}\n\n</details>`;
+  }
+
+  /**
    * Shared logic behind markCommentAsResolved/markCommentAsDismissed:
-   * prefix the comment body with a banner and strike through the original
-   * text, then resolve the underlying review thread via GraphQL. Both
-   * outcomes collapse the conversation on GitHub the same way - only the
-   * banner text differs, so the reader can tell "verified fixed" apart from
-   * "a human chose to ignore this".
+   * annotate the comment body with a banner, then resolve the underlying
+   * review thread via GraphQL. Both outcomes collapse the conversation on
+   * GitHub the same way - only the banner text differs, so the reader can
+   * tell "verified fixed" apart from "a human chose to ignore this".
    */
   private async annotateAndResolveComment(
     githubToken: string,
@@ -202,7 +213,7 @@ export class GithubService {
             owner,
             repo,
             comment_id: cId,
-            body: `${banner}\n\n~${existing.body.replace(/\n/g, "\n~")}~`,
+            body: this.buildAnnotatedBody(existing.body, banner),
           });
         }
 
@@ -264,7 +275,7 @@ export class GithubService {
             owner,
             repo,
             comment_id: cId,
-            body: `${banner}\n\n~${existingIssue.body?.replace(/\n/g, "\n~")}~`,
+            body: this.buildAnnotatedBody(existingIssue.body ?? "", banner),
           });
         }
       } catch (issueErr: any) {
