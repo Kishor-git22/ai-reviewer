@@ -202,6 +202,15 @@ export default function DashboardPage() {
   const repoParam = searchParams.get('repo')
   const prParam = searchParams.get('pr')
 
+  // Which "page" we're on is known synchronously from the URL - it must
+  // never wait on selectedRepo/selectedPr, which only resolve once their
+  // backing lists (repos, then prs) finish loading. Gating the view on
+  // those instead used to render Overview, then the repo's PR list, then
+  // finally the PR view as each fetch resolved in turn - a visible flicker
+  // through every ancestor view on every refresh of a deep-linked URL.
+  const hasRepoSelection = !!ownerParam && !!repoParam
+  const hasPrSelection = hasRepoSelection && !!prParam
+
   const { data: userSettings } = useUserSettings()
   const selectedModels = userSettings?.selectedModels || [
     'llama-3.1',
@@ -310,10 +319,14 @@ export default function DashboardPage() {
 
   // Distinct key per view so the content fades in fresh instead of the
   // abrupt DOM swap that read as a "flicker" between repos / PRs / review.
-  const viewKey = selectedPr
-    ? `pr-${(selectedPr as any).number}`
-    : selectedRepo
-      ? selectedRepo.id
+  // Derived from the URL params, not the resolved objects - keying off
+  // selectedRepo.id/selectedPr.number meant this key itself changed as each
+  // one resolved, remounting (and re-fading) the content on every step of
+  // the load instead of once.
+  const viewKey = hasPrSelection
+    ? `pr-${prParam}`
+    : hasRepoSelection
+      ? `repo-${ownerParam}-${repoParam}`
       : 'repos'
 
   return (
@@ -322,39 +335,39 @@ export default function DashboardPage() {
       <div className="flex flex-col gap-4 border-b border-border/60 bg-background/50 px-4 py-8 backdrop-blur-md sm:flex-row sm:items-center sm:justify-between sm:px-10">
         <div className="space-y-1">
           <div className="flex items-center gap-3">
-            {(selectedRepo || selectedPr) && (
+            {hasRepoSelection && (
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={selectedPr ? handleBackToPrs : handleBackToRepos}
+                onClick={hasPrSelection ? handleBackToPrs : handleBackToRepos}
                 className="h-8 w-8 rounded-lg p-0 hover:bg-accent"
               >
                 <ChevronRight className="rotate-180" size={18} />
               </Button>
             )}
             <h1 className="font-display text-3xl font-medium tracking-tight text-foreground">
-              {selectedPr && prAnalysis?.status
-                ? 'Review'
-                : selectedPr
-                  ? 'Set up review'
-                  : selectedRepo
-                    ? 'Pull requests'
-                    : 'Overview'}
+              {hasPrSelection
+                ? prAnalysis?.status
+                  ? 'Review'
+                  : 'Set up review'
+                : hasRepoSelection
+                  ? 'Pull requests'
+                  : 'Overview'}
             </h1>
           </div>
           <p className="text-sm font-medium text-muted-foreground">
-            {selectedPr
+            {hasPrSelection
               ? prAnalysis?.status === 'completed'
-                ? `Full analysis for PR #${(selectedPr as any)?.number || searchParams.get('pr')}`
+                ? `Full analysis for PR #${prParam}`
                 : prAnalysis?.status === 'stopped'
-                  ? `Analysis stopped for PR #${(selectedPr as any)?.number || searchParams.get('pr')}`
+                  ? `Analysis stopped for PR #${prParam}`
                   : prAnalysis?.status === 'failed'
-                    ? `Analysis failed for PR #${(selectedPr as any)?.number || searchParams.get('pr')}`
+                    ? `Analysis failed for PR #${prParam}`
                     : prAnalysis?.status === 'in_progress' || prAnalysis?.status === 'pending'
-                      ? `The panel is debating #${(selectedPr as any)?.number || searchParams.get('pr')}`
+                      ? `The panel is debating #${prParam}`
                       : 'Choose which models review this change.'
-              : selectedRepo
-                ? `Open PRs for ${selectedRepo.full_name}`
+              : hasRepoSelection
+                ? `Open PRs for ${selectedRepo?.full_name ?? `${ownerParam}/${repoParam}`}`
                 : 'Select a repository to begin.'}
           </p>
         </div>
@@ -362,8 +375,8 @@ export default function DashboardPage() {
 
       {/* Main Content Area */}
       <div key={viewKey} className="view-transition flex-1 p-4 sm:p-10">
-        {selectedPr ? (
-          isPrAnalysisLoading ? (
+        {hasPrSelection ? (
+          !selectedRepo || !selectedPr || isPrAnalysisLoading ? (
             <div className="flex h-full flex-col items-center justify-center space-y-8 py-20">
               <Loader2 className="h-10 w-10 animate-spin text-primary" />
             </div>
@@ -472,94 +485,109 @@ export default function DashboardPage() {
               </div>
             </div>
           )
-        ) : (
-          <div className="mx-auto max-w-7xl space-y-12">
-            {!selectedRepo && (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <Card className="border-border/60 bg-card/40">
-                  <CardContent className="p-5">
-                    {isMyStatsLoading ? (
-                      <div className="h-8 w-12 animate-pulse rounded bg-accent/40" />
-                    ) : (
-                      <div className="text-2xl font-semibold text-primary">
-                        {myStats?.activeRepos ?? 0}
-                      </div>
-                    )}
-                    <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Active repositories
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card className="border-border/60 bg-card/40">
-                  <CardContent className="p-5">
-                    {isMyStatsLoading ? (
-                      <div className="h-8 w-12 animate-pulse rounded bg-accent/40" />
-                    ) : (
-                      <div className="text-2xl font-semibold text-agent-1">
-                        {myStats?.prsReviewed ?? 0}
-                      </div>
-                    )}
-                    <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Pull requests reviewed
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card className="border-border/60 bg-card/40">
-                  <CardContent className="p-5">
-                    {isMyStatsLoading ? (
-                      <div className="h-8 w-12 animate-pulse rounded bg-accent/40" />
-                    ) : (
-                      <div className="text-2xl font-semibold text-success">
-                        {myStats?.consensusRate != null ? `${myStats.consensusRate}%` : ''}
-                      </div>
-                    )}
-                    <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Panel agreement
-                    </div>
-                  </CardContent>
-                </Card>
+        ) : hasRepoSelection ? (
+          <div className="mx-auto max-w-7xl space-y-8">
+            <div className="flex items-center justify-between px-2">
+              <h2 className="font-display text-xl font-medium tracking-tight text-foreground">
+                Select a pull request
+              </h2>
+              <Badge variant="secondary" className="rounded-md px-3 py-1 font-semibold">
+                {prs?.length || 0} total
+              </Badge>
+            </div>
+
+            {!selectedRepo || isPrsLoading ? (
+              <div className="flex flex-col gap-4">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="h-24 animate-pulse rounded-xl bg-accent/30" />
+                ))}
+              </div>
+            ) : prs?.length ? (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {prs.map((pr) => (
+                  <PRListItem
+                    key={pr.id}
+                    pr={pr}
+                    isSelected={false}
+                    onClick={() => handlePrClick(pr)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border/60 bg-accent/5 py-24 text-center">
+                <div className="mb-6 rounded-2xl bg-accent p-6">
+                  <GitPullRequest size={40} className="text-muted-foreground" />
+                </div>
+                <p className="text-lg font-semibold text-foreground">No pull requests found</p>
+                <p className="mt-2 font-medium text-muted-foreground">
+                  This repository doesn&apos;t have any open or closed PRs yet.
+                </p>
               </div>
             )}
+          </div>
+        ) : (
+          <div className="mx-auto max-w-7xl space-y-12">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <Card className="border-border/60 bg-card/40">
+                <CardContent className="p-5">
+                  {isMyStatsLoading ? (
+                    <div className="h-8 w-12 animate-pulse rounded bg-accent/40" />
+                  ) : (
+                    <div className="text-2xl font-semibold text-primary">
+                      {myStats?.activeRepos ?? 0}
+                    </div>
+                  )}
+                  <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Active repositories
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-border/60 bg-card/40">
+                <CardContent className="p-5">
+                  {isMyStatsLoading ? (
+                    <div className="h-8 w-12 animate-pulse rounded bg-accent/40" />
+                  ) : (
+                    <div className="text-2xl font-semibold text-agent-1">
+                      {myStats?.prsReviewed ?? 0}
+                    </div>
+                  )}
+                  <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Pull requests reviewed
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-border/60 bg-card/40">
+                <CardContent className="p-5">
+                  {isMyStatsLoading ? (
+                    <div className="h-8 w-12 animate-pulse rounded bg-accent/40" />
+                  ) : (
+                    <div className="text-2xl font-semibold text-success">
+                      {myStats?.consensusRate != null ? `${myStats.consensusRate}%` : ''}
+                    </div>
+                  )}
+                  <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Panel agreement
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
 
             <div className="space-y-8">
               <div className="flex items-center justify-between px-2">
                 <h2 className="font-display text-xl font-medium tracking-tight text-foreground">
-                  {selectedRepo ? 'Select a pull request' : 'Your repositories'}
+                  Your repositories
                 </h2>
                 <Badge variant="secondary" className="rounded-md px-3 py-1 font-semibold">
-                  {(selectedRepo ? prs?.length : repos?.length) || 0} total
+                  {repos?.length || 0} total
                 </Badge>
               </div>
 
-              {(selectedRepo ? isPrsLoading : isReposLoading) ? (
+              {isReposLoading ? (
                 <div className="flex flex-col gap-4">
                   {[...Array(6)].map((_, i) => (
                     <div key={i} className="h-24 animate-pulse rounded-xl bg-accent/30" />
                   ))}
                 </div>
-              ) : selectedRepo ? (
-                prs?.length ? (
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    {prs.map((pr) => (
-                      <PRListItem
-                        key={pr.id}
-                        pr={pr}
-                        isSelected={false}
-                        onClick={() => handlePrClick(pr)}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border/60 bg-accent/5 py-24 text-center">
-                    <div className="mb-6 rounded-2xl bg-accent p-6">
-                      <GitPullRequest size={40} className="text-muted-foreground" />
-                    </div>
-                    <p className="text-lg font-semibold text-foreground">No pull requests found</p>
-                    <p className="mt-2 font-medium text-muted-foreground">
-                      This repository doesn&apos;t have any open or closed PRs yet.
-                    </p>
-                  </div>
-                )
               ) : repos?.length ? (
                 <div className="flex flex-col gap-4">
                   {repos.map((repo) => {
