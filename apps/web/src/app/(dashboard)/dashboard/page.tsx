@@ -332,9 +332,9 @@ export default function DashboardPage() {
       : 'repos'
 
   return (
-    <div className="flex min-h-full flex-col">
-      {/* Page Header */}
-      <div className="flex flex-col gap-4 border-b border-border/60 bg-background/50 px-4 py-8 backdrop-blur-md sm:flex-row sm:items-center sm:justify-between sm:px-10">
+    <div className="flex h-full flex-col">
+      {/* Page Header - shrink-0 so it stays put; only the box below scrolls */}
+      <div className="flex shrink-0 flex-col gap-4 border-b border-border/60 bg-background/50 px-4 py-8 backdrop-blur-md sm:flex-row sm:items-center sm:justify-between sm:px-10">
         <div className="space-y-1">
           <div className="flex items-center gap-3">
             {hasRepoSelection && (
@@ -375,8 +375,11 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <div key={viewKey} className="view-transition flex-1 p-4 sm:p-10">
+      {/* Content below the header: static summary bits (stats, "select a
+          pull request") render directly; the actual list/findings get
+          their own scrollable, rounded box - matching the app's card
+          language instead of one flat page that scrolls as a whole. */}
+      <div key={viewKey} className="view-transition flex min-h-0 flex-1 flex-col">
         {hasPrSelection ? (
           !selectedRepo || !selectedPr || isPrAnalysisLoading ? (
             <div className="flex h-full flex-col items-center justify-center space-y-8 py-20">
@@ -488,94 +491,102 @@ export default function DashboardPage() {
             </div>
           )
         ) : hasRepoSelection ? (
-          <div className="mx-auto max-w-7xl space-y-8">
-            <div className="flex items-center justify-between px-2">
-              <h2 className="font-display text-xl font-medium tracking-tight text-foreground">
-                Select a pull request
-              </h2>
-              <Badge variant="secondary" className="rounded-md px-3 py-1 font-semibold">
-                {prs?.length || 0} total
-              </Badge>
-            </div>
+          <div className="flex min-h-0 flex-1 flex-col p-4 sm:p-10">
+            <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col gap-4">
+              <div className="flex shrink-0 items-center justify-between px-2">
+                <h2 className="font-display text-xl font-medium tracking-tight text-foreground">
+                  Select a pull request
+                </h2>
+                <Badge variant="secondary" className="rounded-md px-3 py-1 font-semibold">
+                  {prs?.length || 0} total
+                </Badge>
+              </div>
 
-            {!selectedRepo || isPrsLoading ? (
-              <div className="flex flex-col gap-4">
-                {[...Array(6)].map((_, i) => (
-                  <div key={i} className="h-24 animate-pulse rounded-xl bg-accent/30" />
-                ))}
+              <div className="dashboard-scroll min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border/60 bg-background/40 p-4">
+                {!selectedRepo || isPrsLoading ? (
+                  <div className="flex flex-col gap-4">
+                    {[...Array(6)].map((_, i) => (
+                      <div key={i} className="h-24 animate-pulse rounded-xl bg-accent/30" />
+                    ))}
+                  </div>
+                ) : prs?.length ? (
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    {prs.map((pr) => (
+                      <PRListItem
+                        key={pr.id}
+                        pr={pr}
+                        isSelected={false}
+                        onClick={() => handlePrClick(pr)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border/60 bg-accent/5 py-24 text-center">
+                    <div className="mb-6 rounded-2xl bg-accent p-6">
+                      <GitPullRequest size={40} className="text-muted-foreground" />
+                    </div>
+                    <p className="text-lg font-semibold text-foreground">No pull requests found</p>
+                    <p className="mt-2 font-medium text-muted-foreground">
+                      This repository doesn&apos;t have any open or closed PRs yet.
+                    </p>
+                  </div>
+                )}
               </div>
-            ) : prs?.length ? (
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                {prs.map((pr) => (
-                  <PRListItem
-                    key={pr.id}
-                    pr={pr}
-                    isSelected={false}
-                    onClick={() => handlePrClick(pr)}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border/60 bg-accent/5 py-24 text-center">
-                <div className="mb-6 rounded-2xl bg-accent p-6">
-                  <GitPullRequest size={40} className="text-muted-foreground" />
-                </div>
-                <p className="text-lg font-semibold text-foreground">No pull requests found</p>
-                <p className="mt-2 font-medium text-muted-foreground">
-                  This repository doesn&apos;t have any open or closed PRs yet.
-                </p>
-              </div>
-            )}
+            </div>
           </div>
         ) : (
-          <div className="mx-auto max-w-7xl space-y-12">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <Card className="border-border/60 bg-card/40">
-                <CardContent className="p-5">
-                  {isMyStatsLoading ? (
-                    <div className="h-8 w-12 animate-pulse rounded bg-accent/40" />
-                  ) : (
-                    <div className="text-2xl font-semibold text-primary">
-                      {myStats?.activeRepos ?? 0}
+          <div className="flex min-h-0 flex-1 flex-col gap-6 p-4 sm:p-10">
+            {/* Static summary - stays put, doesn't scroll with the list */}
+            <div className="mx-auto w-full max-w-7xl shrink-0">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <Card className="border-border/60 bg-card/40">
+                  <CardContent className="p-5">
+                    {isMyStatsLoading ? (
+                      <div className="h-8 w-12 animate-pulse rounded bg-accent/40" />
+                    ) : (
+                      <div className="text-2xl font-semibold text-primary">
+                        {myStats?.activeRepos ?? 0}
+                      </div>
+                    )}
+                    <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Active repositories
                     </div>
-                  )}
-                  <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Active repositories
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-border/60 bg-card/40">
-                <CardContent className="p-5">
-                  {isMyStatsLoading ? (
-                    <div className="h-8 w-12 animate-pulse rounded bg-accent/40" />
-                  ) : (
-                    <div className="text-2xl font-semibold text-agent-1">
-                      {myStats?.prsReviewed ?? 0}
+                  </CardContent>
+                </Card>
+                <Card className="border-border/60 bg-card/40">
+                  <CardContent className="p-5">
+                    {isMyStatsLoading ? (
+                      <div className="h-8 w-12 animate-pulse rounded bg-accent/40" />
+                    ) : (
+                      <div className="text-2xl font-semibold text-agent-1">
+                        {myStats?.prsReviewed ?? 0}
+                      </div>
+                    )}
+                    <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Pull requests reviewed
                     </div>
-                  )}
-                  <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Pull requests reviewed
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-border/60 bg-card/40">
-                <CardContent className="p-5">
-                  {isMyStatsLoading ? (
-                    <div className="h-8 w-12 animate-pulse rounded bg-accent/40" />
-                  ) : (
-                    <div className="text-2xl font-semibold text-success">
-                      {myStats?.consensusRate != null ? `${myStats.consensusRate}%` : ''}
+                  </CardContent>
+                </Card>
+                <Card className="border-border/60 bg-card/40">
+                  <CardContent className="p-5">
+                    {isMyStatsLoading ? (
+                      <div className="h-8 w-12 animate-pulse rounded bg-accent/40" />
+                    ) : (
+                      <div className="text-2xl font-semibold text-success">
+                        {myStats?.consensusRate != null ? `${myStats.consensusRate}%` : ''}
+                      </div>
+                    )}
+                    <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Panel agreement
                     </div>
-                  )}
-                  <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Panel agreement
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
 
-            <div className="space-y-8">
-              <div className="flex items-center justify-between px-2">
+            {/* Heading + scrollable, rounded box - the part that was circled */}
+            <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col gap-4">
+              <div className="flex shrink-0 items-center justify-between px-2">
                 <h2 className="font-display text-xl font-medium tracking-tight text-foreground">
                   Your repositories
                 </h2>
@@ -584,40 +595,42 @@ export default function DashboardPage() {
                 </Badge>
               </div>
 
-              {isReposLoading ? (
-                <div className="flex flex-col gap-4">
-                  {[...Array(6)].map((_, i) => (
-                    <div key={i} className="h-24 animate-pulse rounded-xl bg-accent/30" />
-                  ))}
-                </div>
-              ) : repos?.length ? (
-                <div className="flex flex-col gap-4">
-                  {repos.map((repo) => {
-                    const isActive = activeRepos?.some(
-                      (ar: any) => ar.name === repo.name && ar.owner === repo.owner.login
-                    )
-                    return (
-                      <RepoListItem
-                        key={repo.id}
-                        repo={repo}
-                        isReviewActive={isActive}
-                        onToggleActive={() => handleToggleActive(repo)}
-                        onClick={() => handleRepoClick(repo)}
-                      />
-                    )
-                  })}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border/60 bg-accent/5 py-24 text-center">
-                  <div className="mb-6 rounded-2xl bg-accent p-6">
-                    <Globe size={40} className="text-muted-foreground" />
+              <div className="dashboard-scroll min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border/60 bg-background/40 p-4">
+                {isReposLoading ? (
+                  <div className="flex flex-col gap-4">
+                    {[...Array(6)].map((_, i) => (
+                      <div key={i} className="h-24 animate-pulse rounded-xl bg-accent/30" />
+                    ))}
                   </div>
-                  <p className="text-lg font-semibold text-foreground">No repositories found</p>
-                  <p className="mt-2 font-medium text-muted-foreground">
-                    We couldn&apos;t find any repositories in your GitHub account.
-                  </p>
-                </div>
-              )}
+                ) : repos?.length ? (
+                  <div className="flex flex-col gap-4">
+                    {repos.map((repo) => {
+                      const isActive = activeRepos?.some(
+                        (ar: any) => ar.name === repo.name && ar.owner === repo.owner.login
+                      )
+                      return (
+                        <RepoListItem
+                          key={repo.id}
+                          repo={repo}
+                          isReviewActive={isActive}
+                          onToggleActive={() => handleToggleActive(repo)}
+                          onClick={() => handleRepoClick(repo)}
+                        />
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border/60 bg-accent/5 py-24 text-center">
+                    <div className="mb-6 rounded-2xl bg-accent p-6">
+                      <Globe size={40} className="text-muted-foreground" />
+                    </div>
+                    <p className="text-lg font-semibold text-foreground">No repositories found</p>
+                    <p className="mt-2 font-medium text-muted-foreground">
+                      We couldn&apos;t find any repositories in your GitHub account.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

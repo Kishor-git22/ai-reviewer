@@ -285,7 +285,7 @@ export default function DocsPage() {
 
           <Section id="contributing" title="Contributing">
             <p>This is an npm-workspaces monorepo: the web app and API are separate workspaces.</p>
-            <pre className="overflow-x-auto rounded-xl border border-border/60 bg-card/60 p-4 font-mono text-xs text-foreground/80">
+            <pre className="scrollbar-hide overflow-x-auto rounded-xl border border-border/60 bg-card/60 p-4 font-mono text-xs text-foreground/80">
               {`git clone https://github.com/Kishor-git22/ai-reviewer.git
 npm install
 

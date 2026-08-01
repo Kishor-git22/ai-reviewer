@@ -60,7 +60,13 @@ export function DashboardSidebar({ children, defaultOpen = true }: SidebarProps)
         } as React.CSSProperties
       }
     >
-      <div className="flex min-h-svh w-full bg-background p-1">
+      {/* h-svh, not min-h-svh: a fixed height, not just a minimum, is what
+          lets every nested flex-1/overflow-y-auto chain below (sidebar,
+          header, scroll box) resolve against a real fixed number instead of
+          "however tall the content happens to be" - which is exactly why
+          the scroll box wasn't reliably stretching to the same bottom edge
+          as the sidebar when there wasn't much content in it. */}
+      <div className="flex h-svh w-full gap-1 overflow-hidden bg-background p-1">
         {/* Floating Independent Sidebar Panel */}
         <ShadcnSidebar variant="floating" collapsible="icon" className="border-none bg-transparent">
           <div className="flex h-full flex-col gap-2">
@@ -180,8 +186,11 @@ export function DashboardSidebar({ children, defaultOpen = true }: SidebarProps)
           </div>
         </ShadcnSidebar>
 
-        {/* Separated Main Content Panel - Dynamically synchronized with Sidebar state */}
-        <SidebarInset className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/60 bg-card/50 shadow-lg shadow-black/20 transition-[margin] duration-200 ease-out md:peer-data-[state=collapsed]:ml-0 md:peer-data-[state=expanded]:ml-[calc(var(--sidebar-width)+theme(spacing.1))]">
+        {/* Separated Main Content Panel - sits in normal flex flow right after
+            the sidebar's own (now correctly full-width) spacer, so its
+            position is structural, not a margin hack keyed to sidebar state -
+            just as static as the sidebar's own fixed positioning. */}
+        <SidebarInset className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/60 bg-card/50 shadow-lg shadow-black/20">
           <header className="flex h-16 shrink-0 items-center justify-between border-b border-border/60 px-4 sm:px-6">
             <div className="flex items-center gap-3 sm:gap-4">
               {/* Sidebar renders as an off-canvas Sheet under md, which only
@@ -208,9 +217,10 @@ export function DashboardSidebar({ children, defaultOpen = true }: SidebarProps)
             </div>
           </header>
 
-          <main className="scrollbar-hide flex-1 overflow-y-auto p-0 focus:outline-none">
-            {children}
-          </main>
+          {/* overflow-hidden, not scroll: each page owns its own header
+              (stable) + scrollable content box below it now, instead of the
+              whole page - header included - scrolling as one long list. */}
+          <main className="flex-1 overflow-hidden p-0 focus:outline-none">{children}</main>
         </SidebarInset>
       </div>
     </SidebarProvider>

@@ -92,29 +92,21 @@
   background-image: url('/noise.svg');
 }
 
-/* Custom scrollbar for dashboard */
+/* Scrolls normally, shows no scrollbar - used throughout the dashboard
+   (the repo/PR/findings boxes, settings, the debate transcript) so
+   scrolling never reads as "there's a visible track/thumb sitting in this
+   card", just content that keeps going. */
+.dashboard-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
 .dashboard-scroll::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  display: none;
 }
 
-.dashboard-scroll::-webkit-scrollbar-track {
-  background: hsl(var(--sidebar-background));
-}
-
-.dashboard-scroll::-webkit-scrollbar-thumb {
-  background: hsl(var(--border));
-  border-radius: 3px;
-}
-
-.dashboard-scroll::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground));
-}
-
-/* Hides the scrollbar on an element that still scrolls normally - used for
-   horizontally-scrolling pill/tab rows and the dashboard's main content
-   pane, where a visible scrollbar track reads as a layout bug, not a
-   feature. Referenced in a few places already; this was never defined. */
+/* Same, generic name for anywhere else that isn't dashboard-specific
+   (e.g. the docs page's horizontal section-jump bar). */
 .scrollbar-hide {
   scrollbar-width: none;
   -ms-overflow-style: none;

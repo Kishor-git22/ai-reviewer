@@ -358,151 +358,143 @@ export function AnalysisView({ pr, analysis, history = [], onBack }: AnalysisVie
   const confirmedCount = completedFindings.filter((f) => f.consensus).length
 
   return (
-    <div className="flex min-h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       {/* Main Content Area */}
-      <div className="mx-auto w-full max-w-7xl space-y-8 p-4 sm:p-8">
-        {/* Header with Loader */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="flex items-center gap-3 font-display text-2xl font-medium tracking-tight text-foreground">
-              Review
-              {isProcessing && (
-                <Badge className="animate-pulse border-primary/20 bg-primary/15 text-primary">
-                  <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
-                  Analyzing new changes
-                </Badge>
-              )}
-              {analysis.status === 'stopped' && (
-                <Badge
-                  variant="destructive"
-                  className="border-destructive/20 bg-destructive/15 text-destructive"
-                >
-                  <AlertCircle className="mr-2 h-3 w-3" />
-                  Stopped
-                </Badge>
-              )}
-            </h1>
-            <p className="mt-1 text-sm font-medium text-muted-foreground">
-              {analysis.status === 'stopped'
-                ? 'The review was stopped because this pull request has been closed.'
-                : isProcessing
-                  ? 'New commits were pushed  the panel is reviewing them now.'
-                  : `Full analysis for PR #${(pr as any)?.number || ''}`}
-            </p>
-          </div>
-        </div>
-
-        {analysis.status === 'stopped' && (
-          <div className="flex items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-destructive">
-            <AlertCircle className="h-5 w-5 shrink-0" />
-            <span className="text-sm font-medium">
-              The review was stopped because this pull request has been closed.
-            </span>
-          </div>
-        )}
-
-        {/* Responsive Stats Grid */}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
-          <Card className="border-border/60 bg-accent/10">
-            <CardContent className="p-4 text-center">
-              <div className="text-2xl font-semibold text-agent-1 sm:text-3xl">
-                {analysis.qualityScore || 0}%
-              </div>
-              <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Quality
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="border-border/60 bg-accent/10">
-            <CardContent className="p-4 text-center">
-              <div className="text-2xl font-semibold text-destructive sm:text-3xl">
-                {analysis.securityScore || 0}%
-              </div>
-              <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Security
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="border-border/60 bg-accent/10">
-            <CardContent className="p-4 text-center">
-              <div className="text-2xl font-semibold text-agent-2 sm:text-3xl">
-                {totalFindingsCount}
-              </div>
-              <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Issues
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="border-border/60 bg-accent/10">
-            <CardContent className="p-4 text-center">
-              <div className="text-2xl font-semibold text-success sm:text-3xl">
-                {confirmedCount}
-              </div>
-              <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Agreed
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Informational Card */}
-        <Card className="overflow-hidden border-border/60 bg-accent/10">
-          <CardContent className="p-6">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                <Shield className="h-5 w-5 text-primary" />
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-sm font-semibold tracking-tight text-foreground">
-                  Panel summary
-                </h3>
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  {analysis.summary ||
-                    'Consensus building complete. Review the confirmed findings below.'}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Findings Grouped by Commit */}
-        <div className="space-y-12">
-          {sortedCommits.map((sha, index) => (
-            <CommitGroup
-              key={sha}
-              commitSha={sha}
-              findings={findingsByCommit[sha]}
-              isLatest={index === 0}
-            />
-          ))}
-        </div>
-
-        {/* Empty State */}
-        {!isProcessing && totalFindingsCount === 0 && (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="mb-6 rounded-2xl bg-success/10 p-5">
-              <CheckCircle2 className="h-10 w-10 text-success" />
-            </div>
-            <h3 className="font-display text-lg font-medium text-foreground">No issues found</h3>
-            <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-              The panel found zero vulnerabilities or quality issues in this pull request.
-            </p>
-          </div>
-        )}
-
-        {isProcessing && totalFindingsCount === 0 && (
-          <div className="flex flex-col items-center justify-center space-y-8 py-16 text-center">
-            <div className="max-w-xs space-y-2">
-              <h3 className="font-display text-lg font-medium text-foreground">
-                Analyzing your changes
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                The panel is debating the new code. Findings will appear here as they agree.
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col p-4 sm:p-8">
+        {/* Static: header, stats, panel summary - stays put; only the
+            findings box below scrolls. */}
+        <div className="shrink-0 space-y-6">
+          {/* Header with Loader */}
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="flex items-center gap-3 font-display text-2xl font-medium tracking-tight text-foreground">
+                Review
+                {isProcessing && (
+                  <Badge className="animate-pulse border-primary/20 bg-primary/15 text-primary">
+                    <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
+                    Analyzing new changes
+                  </Badge>
+                )}
+                {analysis.status === 'stopped' && (
+                  <Badge
+                    variant="destructive"
+                    className="border-destructive/20 bg-destructive/15 text-destructive"
+                  >
+                    <AlertCircle className="mr-2 h-3 w-3" />
+                    Stopped
+                  </Badge>
+                )}
+              </h1>
+              <p className="mt-1 text-sm font-medium text-muted-foreground">
+                {analysis.status === 'stopped'
+                  ? 'The review was stopped because this pull request has been closed.'
+                  : isProcessing
+                    ? 'New commits were pushed  the panel is reviewing them now.'
+                    : `Full analysis for PR #${(pr as any)?.number || ''}`}
               </p>
             </div>
-            <DebateArena modelIds={analysis.models || []} prTitle={pr?.title} />
           </div>
-        )}
+
+          {analysis.status === 'stopped' && (
+            <div className="flex items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-destructive">
+              <AlertCircle className="h-5 w-5 shrink-0" />
+              <span className="text-sm font-medium">
+                The review was stopped because this pull request has been closed.
+              </span>
+            </div>
+          )}
+
+          {/* Responsive Stats Grid */}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+            <Card className="border-border/60 bg-accent/10">
+              <CardContent className="p-4 text-center">
+                <div className="text-2xl font-semibold text-agent-1 sm:text-3xl">
+                  {analysis.qualityScore || 0}%
+                </div>
+                <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Quality
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-border/60 bg-accent/10">
+              <CardContent className="p-4 text-center">
+                <div className="text-2xl font-semibold text-destructive sm:text-3xl">
+                  {analysis.securityScore || 0}%
+                </div>
+                <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Security
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-border/60 bg-accent/10">
+              <CardContent className="p-4 text-center">
+                <div className="text-2xl font-semibold text-agent-2 sm:text-3xl">
+                  {totalFindingsCount}
+                </div>
+                <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Issues
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-border/60 bg-accent/10">
+              <CardContent className="p-4 text-center">
+                <div className="text-2xl font-semibold text-success sm:text-3xl">
+                  {confirmedCount}
+                </div>
+                <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Agreed
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        {/* Scrollable, rounded box: findings + empty states - the part
+            that actually grows long, kept separate from the static summary
+            above so the summary never scrolls out of view. */}
+        {/* Just scroll - no border/background of its own. Each finding
+            below is already its own bordered card; wrapping the whole list
+            in another bordered/tinted panel was a box around the boxes. */}
+        <div className="dashboard-scroll mt-6 min-h-0 flex-1 overflow-y-auto">
+          {/* Findings Grouped by Commit */}
+          <div className="space-y-12">
+            {sortedCommits.map((sha, index) => (
+              <CommitGroup
+                key={sha}
+                commitSha={sha}
+                findings={findingsByCommit[sha]}
+                isLatest={index === 0}
+              />
+            ))}
+          </div>
+
+          {/* Empty State */}
+          {!isProcessing && totalFindingsCount === 0 && (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="mb-6 rounded-2xl bg-success/10 p-5">
+                <CheckCircle2 className="h-10 w-10 text-success" />
+              </div>
+              <h3 className="font-display text-lg font-medium text-foreground">No issues found</h3>
+              <p className="mx-auto max-w-sm text-sm text-muted-foreground">
+                The panel found zero vulnerabilities or quality issues in this pull request.
+              </p>
+            </div>
+          )}
+
+          {isProcessing && totalFindingsCount === 0 && (
+            <div className="flex flex-col items-center justify-center space-y-8 py-16 text-center">
+              <div className="max-w-xs space-y-2">
+                <h3 className="font-display text-lg font-medium text-foreground">
+                  Analyzing your changes
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  The panel is debating the new code. Findings will appear here as they agree.
+                </p>
+              </div>
+              <DebateArena modelIds={analysis.models || []} prTitle={pr?.title} />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
