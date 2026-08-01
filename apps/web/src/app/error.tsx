@@ -30,14 +30,17 @@ export default function GlobalError({
         An unexpected error interrupted this page. It&apos;s been logged try again, or head back
         home.
       </p>
-      <div className="mt-8 flex items-center gap-3">
-        <Button onClick={() => reset()} className="h-11 rounded-lg px-6 font-semibold">
+      <div className="mt-8 flex w-full max-w-xs flex-col gap-3 sm:w-auto sm:max-w-none sm:flex-row sm:items-center">
+        <Button
+          onClick={() => reset()}
+          className="h-11 w-full rounded-lg px-6 font-semibold sm:w-auto"
+        >
           Try again
         </Button>
         <Button
           asChild
           variant="outline"
-          className="h-11 rounded-lg border-border/60 px-6 font-semibold"
+          className="h-11 w-full rounded-lg border-border/60 px-6 font-semibold sm:w-auto"
         >
           <Link href="/">Back to home</Link>
         </Button>
