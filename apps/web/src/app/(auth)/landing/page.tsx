@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
-import { signIn } from 'next-auth/react'
-import { useSearchParams } from 'next/navigation'
+import { signIn, useSession } from 'next-auth/react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { Github, Terminal, Layers, MessageSquare, Users, Zap, Mail, Linkedin } from 'lucide-react'
 import { HeroScene } from '@/components/canvas/HeroScene'
@@ -27,9 +27,13 @@ const MODEL_CUBE_COLORS = [
 
 function LandingContent() {
   const [isLoading, setIsLoading] = useState(false)
+  const router = useRouter()
   const searchParams = useSearchParams()
   const error = searchParams.get('error')
   const { data: stats, isLoading: isStatsLoading } = usePublicStats()
+  const { data: session, status: sessionStatus } = useSession()
+  const isAuthenticated = sessionStatus === 'authenticated'
+  const displayName = session?.user?.login || session?.user?.name
 
   const getErrorMessage = (error: string) => {
     switch (error) {
@@ -62,6 +66,10 @@ function LandingContent() {
   }, [error])
 
   const handleLogin = async () => {
+    if (isAuthenticated) {
+      router.push('/dashboard')
+      return
+    }
     setIsLoading(true)
     await signIn('github', { callbackUrl: '/dashboard' })
   }
@@ -91,7 +99,7 @@ function LandingContent() {
               variant="outline"
               className="border-border/60 bg-transparent text-foreground hover:bg-accent"
             >
-              {isLoading ? 'Loading...' : 'Log in'}
+              {isLoading ? 'Loading...' : isAuthenticated ? `Continue as ${displayName}` : 'Log in'}
             </Button>
           </div>
         </div>
@@ -130,7 +138,11 @@ function LandingContent() {
                   className="flex w-full items-center justify-center gap-3 rounded-lg px-8 py-6 text-base font-semibold sm:w-auto"
                 >
                   <Github size={20} />
-                  {isLoading ? 'Loading...' : 'Continue with GitHub'}
+                  {isLoading
+                    ? 'Loading...'
+                    : isAuthenticated
+                      ? `Continue as ${displayName}`
+                      : 'Continue with GitHub'}
                 </Button>
                 <a
                   href="/docs"
