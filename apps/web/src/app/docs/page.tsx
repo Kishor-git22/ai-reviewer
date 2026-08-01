@@ -152,7 +152,7 @@ export default function DocsPage() {
                 className="font-medium text-primary hover:underline"
                 href="https://nextjs.org"
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
               >
                 Next.js
               </a>{' '}
@@ -161,7 +161,7 @@ export default function DocsPage() {
                 className="font-medium text-primary hover:underline"
                 href="https://nestjs.com"
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
               >
                 NestJS
               </a>{' '}
@@ -349,7 +349,7 @@ npm run dev:api   # http://localhost:3001`}
                 className="font-medium text-primary hover:underline"
                 href="https://www.contributor-covenant.org"
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
               >
                 Contributor Covenant
               </a>

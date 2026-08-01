@@ -156,7 +156,7 @@ function LandingContent() {
                     <a
                       href="https://github.com/Kishor-git22/ai-reviewer"
                       target="_blank"
-                      rel="noreferrer"
+                      rel="noopener noreferrer"
                       className="flex items-center gap-2 rounded-lg px-3 py-3 text-base font-medium text-foreground transition-colors hover:bg-accent"
                     >
                       <Github className="h-4 w-4" /> Source
@@ -399,7 +399,7 @@ function LandingContent() {
                   <a
                     href="https://github.com/Kishor-git22/ai-reviewer"
                     target="_blank"
-                    rel="noreferrer"
+                    rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground"
                   >
                     <Github size={14} /> Source
@@ -447,7 +447,7 @@ function LandingContent() {
                 <a
                   href="https://github.com/Kishor-git22"
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   aria-label="GitHub profile"
                   className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 text-muted-foreground transition-colors hover:border-primary/40 hover:bg-accent hover:text-foreground"
                 >
@@ -456,7 +456,7 @@ function LandingContent() {
                 <a
                   href="https://www.linkedin.com/in/kishor-annamalai/"
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   aria-label="LinkedIn profile"
                   className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 text-muted-foreground transition-colors hover:border-primary/40 hover:bg-accent hover:text-foreground"
                 >
