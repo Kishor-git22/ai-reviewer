@@ -54,24 +54,24 @@ function RepoListItem({
   return (
     <div
       onClick={onClick}
-      className="group relative flex cursor-pointer items-center justify-between rounded-xl border border-border/60 bg-card/50 p-5 transition-colors hover:border-primary/40 hover:bg-card"
+      className="group relative flex cursor-pointer flex-col gap-4 rounded-xl border border-border/60 bg-card/50 p-4 transition-colors hover:border-primary/40 hover:bg-card sm:flex-row sm:items-center sm:justify-between sm:p-5"
     >
-      <div className="flex items-center gap-5">
+      <div className="flex min-w-0 items-center gap-4 sm:gap-5">
         <div
           className={cn(
-            'flex h-11 w-11 items-center justify-center rounded-xl transition-colors',
+            'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors sm:h-11 sm:w-11',
             isReviewActive ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'
           )}
         >
           {repo.private ? <Lock size={20} /> : <Globe size={20} />}
         </div>
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="truncate text-base font-semibold tracking-tight text-foreground transition-colors group-hover:text-primary">
               {repo.name}
             </span>
             {isReviewActive && (
-              <Badge className="border-primary/20 bg-primary/15 text-[9px] font-semibold uppercase tracking-wide text-primary">
+              <Badge className="shrink-0 border-primary/20 bg-primary/15 text-[9px] font-semibold uppercase tracking-wide text-primary">
                 <Zap className="mr-1 h-3 w-3 fill-primary" />
                 Review active
               </Badge>
@@ -90,7 +90,7 @@ function RepoListItem({
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end">
         <Button
           size="sm"
           variant={isReviewActive ? 'secondary' : 'outline'}
@@ -106,7 +106,7 @@ function RepoListItem({
           {isReviewActive ? 'Deactivate' : 'Activate review'}
         </Button>
         <ChevronRight
-          className="text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary"
+          className="hidden text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary sm:block"
           size={18}
         />
       </div>
@@ -127,14 +127,14 @@ function PRListItem({
     <div
       onClick={onClick}
       className={cn(
-        'group flex cursor-pointer items-center justify-between rounded-xl border border-border/60 bg-card/50 p-5 transition-colors hover:border-primary/40 hover:bg-card',
+        'group flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/50 p-4 transition-colors hover:border-primary/40 hover:bg-card sm:p-5',
         isSelected && 'border-primary/40 bg-card'
       )}
     >
-      <div className="flex items-center gap-5">
+      <div className="flex min-w-0 items-center gap-4 sm:gap-5">
         <div
           className={cn(
-            'flex h-11 w-11 items-center justify-center rounded-xl',
+            'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl sm:h-11 sm:w-11',
             (pr.status as string) === 'in_progress' ||
               (pr.status as string) === 'pending' ||
               pr.status === 'In Progress'
@@ -162,31 +162,33 @@ function PRListItem({
             <CheckCircle2 size={20} />
           )}
         </div>
-        <div>
+        <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-base font-semibold tracking-tight text-foreground transition-colors group-hover:text-primary">
+            <span className="truncate text-base font-semibold tracking-tight text-foreground transition-colors group-hover:text-primary">
               {pr.title}
             </span>
-            <span className="text-xs font-medium text-muted-foreground">#{(pr as any).number}</span>
+            <span className="shrink-0 text-xs font-medium text-muted-foreground">
+              #{(pr as any).number}
+            </span>
           </div>
-          <div className="mt-1 flex items-center gap-3 text-xs font-medium text-muted-foreground">
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-muted-foreground">
             <span className="flex items-center gap-1.5">
-              <div className="h-1.5 w-1.5 rounded-full bg-agent-1" />
+              <div className="h-1.5 w-1.5 shrink-0 rounded-full bg-agent-1" />
               {(pr as any).user}
             </span>
             {pr.quality !== null && (
               <>
-                <span>•</span>
+                <span className="hidden sm:inline">•</span>
                 <span>Score: {pr.quality}%</span>
               </>
             )}
-            <span>•</span>
+            <span className="hidden sm:inline">•</span>
             <span>{new Date((pr as any).createdAt).toLocaleDateString()}</span>
           </div>
         </div>
       </div>
       <ChevronRight
-        className="text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary"
+        className="hidden shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary sm:block"
         size={18}
       />
     </div>

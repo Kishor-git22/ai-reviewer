@@ -96,8 +96,8 @@ export default function SettingsPage() {
       <div className="space-y-8">
         <ModelSelector selectedModels={selectedModels} onChange={setSelectedModels} />
 
-        <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-card/40 p-6">
-          <div className="hidden sm:block">
+        <div className="flex flex-col gap-4 rounded-2xl border border-border/60 bg-card/40 p-6 sm:flex-row sm:items-center sm:justify-between">
+          <div>
             <p className="text-sm font-semibold text-foreground">
               Panel size: <span className="text-primary">{selectedModels.length} / 3</span>
             </p>
@@ -109,7 +109,7 @@ export default function SettingsPage() {
             size="lg"
             onClick={handleSave}
             disabled={selectedModels.length !== 3 || updateMutation.isPending}
-            className="h-12 gap-2 rounded-lg px-8 font-semibold transition-transform active:scale-95 disabled:grayscale"
+            className="h-12 w-full gap-2 rounded-lg px-8 font-semibold transition-transform active:scale-95 disabled:grayscale sm:w-auto"
           >
             {updateMutation.isPending ? (
               <Loader2 className="h-5 w-5 animate-spin" />

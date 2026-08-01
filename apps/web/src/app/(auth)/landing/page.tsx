@@ -4,13 +4,31 @@ import { useState, useEffect, Suspense } from 'react'
 import { signIn, useSession } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
-import { Github, Terminal, Layers, MessageSquare, Users, Zap, Mail, Linkedin } from 'lucide-react'
+import {
+  Github,
+  Terminal,
+  Layers,
+  MessageSquare,
+  Users,
+  Zap,
+  Mail,
+  Linkedin,
+  Menu,
+} from 'lucide-react'
 import { HeroScene } from '@/components/canvas/HeroScene'
 import { Logo, LogoMark } from '@/components/brand/Logo'
 import { ModelCube } from '@/components/brand/ModelCube'
 import { LogoPlate } from '@/components/brand/LogoPlate'
 import { PROVIDER_ICONS } from '@/components/brand/ProviderLogos'
 import { Button } from '@/components/ui/button'
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetClose,
+  SheetTrigger,
+} from '@/components/ui/sheet'
 import { NVIDIA_MODELS, FEATURES } from '@/lib/data'
 import { usePublicStats } from '@/hooks/usePrAnalysis'
 import { formatNumber } from '@/lib/utils'
@@ -80,7 +98,7 @@ function LandingContent() {
       <header className="fixed left-0 right-0 top-0 z-50 border-b border-border/60 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-[4.5rem] max-w-[100rem] items-center justify-between px-6 py-3">
           <Logo />
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3 sm:gap-6">
             <a
               href="#features"
               className="hidden text-sm font-medium text-muted-foreground transition-colors hover:text-foreground md:block"
@@ -97,10 +115,56 @@ function LandingContent() {
               onClick={handleLogin}
               disabled={isLoading}
               variant="outline"
-              className="border-border/60 bg-transparent text-foreground hover:bg-accent"
+              className="border-border/60 bg-transparent px-3 text-sm text-foreground hover:bg-accent sm:px-4 sm:text-base"
             >
               {isLoading ? 'Loading...' : isAuthenticated ? `Continue as ${displayName}` : 'Log in'}
             </Button>
+
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Open menu"
+                  className="shrink-0 text-foreground hover:bg-accent md:hidden"
+                >
+                  <Menu className="h-5 w-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="right" className="w-72 border-border/60 bg-background">
+                <SheetHeader>
+                  <SheetTitle className="text-left font-display font-medium">Menu</SheetTitle>
+                </SheetHeader>
+                <nav className="mt-8 flex flex-col gap-1">
+                  <SheetClose asChild>
+                    <a
+                      href="#features"
+                      className="rounded-lg px-3 py-3 text-base font-medium text-foreground transition-colors hover:bg-accent"
+                    >
+                      Features
+                    </a>
+                  </SheetClose>
+                  <SheetClose asChild>
+                    <a
+                      href="/docs"
+                      className="rounded-lg px-3 py-3 text-base font-medium text-foreground transition-colors hover:bg-accent"
+                    >
+                      Docs
+                    </a>
+                  </SheetClose>
+                  <SheetClose asChild>
+                    <a
+                      href="https://github.com/Kishor-git22/ai-reviewer"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-2 rounded-lg px-3 py-3 text-base font-medium text-foreground transition-colors hover:bg-accent"
+                    >
+                      <Github className="h-4 w-4" /> Source
+                    </a>
+                  </SheetClose>
+                </nav>
+              </SheetContent>
+            </Sheet>
           </div>
         </div>
       </header>

@@ -111,6 +111,19 @@
   background: hsl(var(--muted-foreground));
 }
 
+/* Hides the scrollbar on an element that still scrolls normally - used for
+   horizontally-scrolling pill/tab rows and the dashboard's main content
+   pane, where a visible scrollbar track reads as a layout bug, not a
+   feature. Referenced in a few places already; this was never defined. */
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 @keyframes view-fade-in {
   from {
     opacity: 0;

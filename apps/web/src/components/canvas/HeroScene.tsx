@@ -1,9 +1,28 @@
 'use client'
 
-import { useRef, useMemo } from 'react'
+import { useRef, useMemo, useState, useEffect } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { Float, ContactShadows, Line, OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
+import { cn } from '@/lib/utils'
+
+// Coarse-pointer (touch) devices don't get drag-to-orbit. This canvas sits
+// inline in normal document flow, not fixed full-screen, so capturing touch
+// gestures for 3D rotation also swallows the page-scroll gesture whenever
+// it starts over the hero on a phone or tablet - a real scroll trap, not
+// just a missing nicety. Fine-pointer (mouse/trackpad) devices are
+// unaffected either way, since touch-action only governs touch/pen input.
+function useCanOrbit() {
+  const [canOrbit, setCanOrbit] = useState(false)
+  useEffect(() => {
+    const mql = window.matchMedia('(pointer: fine)')
+    const update = () => setCanOrbit(mql.matches)
+    update()
+    mql.addEventListener('change', update)
+    return () => mql.removeEventListener('change', update)
+  }, [])
+  return canOrbit
+}
 
 const CORE_COLOR = '#E8763A'
 const CORE_RADIUS = 1.2
@@ -178,7 +197,7 @@ function SceneLighting() {
   )
 }
 
-function Scene() {
+function Scene({ interactive }: { interactive: boolean }) {
   return (
     <>
       <SceneLighting />
@@ -203,29 +222,34 @@ function Scene() {
           pinch to zoom within limits that keep the object framed. Panning is
           off on purpose  this sits in a fixed hero slot, and letting users
           drag the whole thing off-center would just strand it out of view
-          with no way back short of a page reload. */}
-      <OrbitControls
-        makeDefault
-        enablePan={false}
-        enableDamping
-        dampingFactor={0.08}
-        rotateSpeed={0.6}
-        minDistance={5.5}
-        maxDistance={12}
-      />
+          with no way back short of a page reload. Fine-pointer devices only
+          (see useCanOrbit) - on touch, this would fight page scroll instead. */}
+      {interactive && (
+        <OrbitControls
+          makeDefault
+          enablePan={false}
+          enableDamping
+          dampingFactor={0.08}
+          rotateSpeed={0.6}
+          minDistance={5.5}
+          maxDistance={12}
+        />
+      )}
     </>
   )
 }
 
 export function HeroScene() {
+  const canOrbit = useCanOrbit()
+
   return (
-    <div className="h-full min-h-[400px] w-full touch-none">
+    <div className={cn('h-full min-h-[400px] w-full', canOrbit && 'touch-none')}>
       <Canvas
         camera={{ position: [0, 0.5, 8.5], fov: 40 }}
         gl={{ antialias: true, alpha: true }}
         dpr={[1, 2]}
       >
-        <Scene />
+        <Scene interactive={canOrbit} />
       </Canvas>
     </div>
   )

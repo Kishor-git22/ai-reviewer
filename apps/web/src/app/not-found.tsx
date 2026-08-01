@@ -16,14 +16,14 @@ export default function NotFound() {
       <p className="mt-3 max-w-sm text-sm font-medium text-muted-foreground">
         The link you followed may be broken, or the page may have moved.
       </p>
-      <div className="mt-8 flex items-center gap-3">
-        <Button asChild className="h-11 rounded-lg px-6 font-semibold">
+      <div className="mt-8 flex w-full max-w-xs flex-col gap-3 sm:w-auto sm:max-w-none sm:flex-row sm:items-center">
+        <Button asChild className="h-11 w-full rounded-lg px-6 font-semibold sm:w-auto">
           <Link href="/">Back to home</Link>
         </Button>
         <Button
           asChild
           variant="outline"
-          className="h-11 rounded-lg border-border/60 px-6 font-semibold"
+          className="h-11 w-full rounded-lg border-border/60 px-6 font-semibold sm:w-auto"
         >
           <Link href="/docs">Read the docs</Link>
         </Button>

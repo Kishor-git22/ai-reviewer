@@ -59,7 +59,7 @@ function Section({
   children: React.ReactNode
 }) {
   return (
-    <section id={id} className="scroll-mt-28 py-12 first:pt-0">
+    <section id={id} className="scroll-mt-36 py-12 first:pt-0 lg:scroll-mt-28">
       <h2 className="mb-6 font-display text-3xl font-medium tracking-tight text-foreground">
         {title}
       </h2>
@@ -83,6 +83,23 @@ export default function DocsPage() {
           </Link>
         </div>
       </header>
+
+      {/* Mobile/tablet section jump bar — the sticky side nav below is
+          hidden under lg, so without this there'd be no way to reach a
+          section short of scrolling past everything ahead of it. */}
+      <nav className="sticky top-16 z-40 border-b border-border/60 bg-background/95 backdrop-blur-md lg:hidden">
+        <div className="scrollbar-hide flex gap-2 overflow-x-auto px-6 py-3">
+          {NAV.map((item) => (
+            <a
+              key={item.href}
+              href={item.href}
+              className="shrink-0 whitespace-nowrap rounded-full border border-border/60 px-3.5 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+            >
+              {item.label}
+            </a>
+          ))}
+        </div>
+      </nav>
 
       <div className="mx-auto grid max-w-6xl grid-cols-1 gap-12 px-6 py-12 lg:grid-cols-[200px_1fr]">
         {/* Side nav */}

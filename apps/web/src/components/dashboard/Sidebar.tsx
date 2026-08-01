@@ -20,6 +20,7 @@ import {
   SidebarMenuItem,
   SidebarProvider,
   SidebarInset,
+  SidebarTrigger,
 } from '@/components/ui/sidebar'
 
 interface SidebarProps {
@@ -181,8 +182,12 @@ export function DashboardSidebar({ children, defaultOpen = true }: SidebarProps)
 
         {/* Separated Main Content Panel - Dynamically synchronized with Sidebar state */}
         <SidebarInset className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/60 bg-card/50 shadow-lg shadow-black/20 transition-[margin] duration-200 ease-out md:peer-data-[state=collapsed]:ml-0 md:peer-data-[state=expanded]:ml-[calc(var(--sidebar-width)+theme(spacing.1))]">
-          <header className="flex h-16 shrink-0 items-center justify-between border-b border-border/60 px-6">
-            <div className="flex items-center gap-4">
+          <header className="flex h-16 shrink-0 items-center justify-between border-b border-border/60 px-4 sm:px-6">
+            <div className="flex items-center gap-3 sm:gap-4">
+              {/* Sidebar renders as an off-canvas Sheet under md, which only
+                  opens via this trigger - without it there's no way at all
+                  to reach the nav/settings/sign-out on a phone. */}
+              <SidebarTrigger className="h-9 w-9 rounded-lg border border-border/60 bg-background/50 hover:bg-accent md:hidden" />
               {!isMainDashboard && (
                 <Button
                   variant="outline"
