@@ -17,7 +17,9 @@ const ScrollArea = React.forwardRef<
     <ScrollAreaPrimitive.Viewport className="h-full w-full rounded-[inherit]">
       {children}
     </ScrollAreaPrimitive.Viewport>
-    <ScrollBar />
+    {/* No <ScrollBar /> - scrolling (wheel/trackpad/touch) works fine off
+        the Viewport alone; the draggable thumb was the only thing that
+        made a scrollbar visible here. */}
     <ScrollAreaPrimitive.Corner />
   </ScrollAreaPrimitive.Root>
 ))

@@ -204,7 +204,7 @@ const Sidebar = React.forwardRef<
       >
         <div
           className={cn(
-            'relative h-svh w-[--sidebar-width-icon] transition-[width] duration-200 ease-linear',
+            'relative h-svh w-[--sidebar-width] transition-[width] duration-200 ease-linear',
             'group-data-[collapsible=offcanvas]:w-0',
             'group-data-[side=right]:rotate-180',
             variant === 'floating' || variant === 'inset'
@@ -298,7 +298,7 @@ const SidebarInset = React.forwardRef<HTMLDivElement, React.ComponentProps<'main
       <main
         ref={ref}
         className={cn(
-          'relative flex min-h-svh flex-1 flex-col bg-background',
+          'relative flex h-full flex-1 flex-col bg-background',
           'peer-data-[variant=inset]:min-h-[calc(100svh-theme(spacing.4))] md:peer-data-[variant=inset]:m-2 md:peer-data-[state=collapsed]:peer-data-[variant=inset]:ml-2 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow',
           className
         )}
@@ -377,7 +377,7 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.ComponentProps<'di
         ref={ref}
         data-sidebar="content"
         className={cn(
-          'flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden',
+          'scrollbar-hide flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden',
           className
         )}
         {...props}
