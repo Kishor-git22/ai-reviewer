@@ -256,7 +256,7 @@ function LandingContent() {
                     <div className="mb-1 h-8 w-14 animate-pulse rounded bg-accent/40" />
                   ) : (
                     <div className="mb-1 text-2xl font-semibold text-success md:text-3xl">
-                      {stats?.consensusRate != null ? `${stats.consensusRate}%` : ''}
+                      {stats?.accuracyRate != null ? `${stats.accuracyRate}%` : ''}
                     </div>
                   )}
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">

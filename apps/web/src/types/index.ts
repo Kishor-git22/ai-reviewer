@@ -7,17 +7,20 @@ export interface NvidiaModel {
 export interface PublicStats {
   members: number
   prsReviewed: number
-  // null means no completed analyses have any candidate findings yet - show
-  // a placeholder, not 0%. Defaulting to 0 here would misreport "confirmed
-  // 0% accuracy" as if reviews ran and failed, when really none have run.
-  consensusRate: number | null
+  // Share of reviewed findings (Resolved or marked Not Acceptable) that
+  // were Resolved - precision as judged by the humans using this, not by
+  // how often the agents agreed with each other. Null means nothing has
+  // been reviewed yet - show a placeholder, not 0%. Defaulting to 0 here
+  // would misreport "reviewed and all wrong" as if a verdict already came
+  // in, when really none has.
+  accuracyRate: number | null
 }
 
 export interface MyStats {
   activeRepos: number
   prsReviewed: number
-  // See PublicStats.consensusRate - same null-means-no-data contract.
-  consensusRate: number | null
+  // See PublicStats.accuracyRate - same null-means-no-data contract.
+  accuracyRate: number | null
 }
 
 export interface Feature {
