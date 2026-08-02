@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Inter, Fraunces } from 'next/font/google'
 import './globals.css'
 import { Providers } from './providers'
@@ -13,9 +13,18 @@ const fraunces = Fraunces({
 })
 
 export const metadata: Metadata = {
-  title: 'AI Review  Code review by consensus',
+  title: 'AI Review - Code review by consensus',
   description:
     'AI Review runs every pull request past a panel of AI models that debate the change and only surface findings the panel agrees on.',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'AI Review',
+  },
+}
+
+export const viewport: Viewport = {
+  themeColor: '#110f0e',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
