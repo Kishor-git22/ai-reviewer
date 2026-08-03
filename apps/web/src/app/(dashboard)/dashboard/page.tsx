@@ -573,11 +573,11 @@ export default function DashboardPage() {
                       <div className="h-8 w-12 animate-pulse rounded bg-accent/40" />
                     ) : (
                       <div className="text-2xl font-semibold text-success">
-                        {myStats?.consensusRate != null ? `${myStats.consensusRate}%` : ''}
+                        {myStats?.accuracyRate != null ? `${myStats.accuracyRate}%` : ''}
                       </div>
                     )}
                     <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Panel agreement
+                      Accuracy rate
                     </div>
                   </CardContent>
                 </Card>

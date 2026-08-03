@@ -54,39 +54,41 @@ export class ReviewerController {
 
   /**
    * Public, aggregate-only numbers for the marketing landing page. No
-   * per-user data just counts and a real consensus rate, so the page
+   * per-user data just counts and a real accuracy rate, so the page
    * never has to fall back to made-up marketing figures.
    */
   @Get("stats/public")
   async getPublicStats() {
-    const [memberCount, reviewedPrGroups, confirmedFindings, candidateAgg] =
+    const [memberCount, reviewedPrGroups, resolvedCount, dismissedCount] =
       await Promise.all([
         this.prisma.user.count(),
         this.prisma.analysis.groupBy({
           by: ["repoName", "prNumber"],
           where: { status: "completed" },
         }),
-        this.prisma.finding.count(),
-        this.prisma.analysis.aggregate({
-          where: { status: "completed" },
-          _sum: { candidateFindingsCount: true },
-        }),
+        this.prisma.finding.count({ where: { status: "resolved" } }),
+        this.prisma.finding.count({ where: { status: "dismissed" } }),
       ]);
 
-    const totalCandidates = candidateAgg._sum.candidateFindingsCount || 0;
+    const reviewedFindings = resolvedCount + dismissedCount;
 
     return {
       members: memberCount,
       prsReviewed: reviewedPrGroups.length,
-      // Share of every issue at least one agent raised that actually reached
-      // 2+-agent agreement - the one accuracy-shaped number this system can
-      // honestly measure, since there's no ground truth to check false
-      // positives against. Deliberately NOT confirmedFindings / itself:
-      // findings that never reach consensus are dropped before a Finding
-      // row ever exists, so that ratio is circular and always reads 100%.
-      consensusRate:
-        totalCandidates > 0
-          ? Math.round((confirmedFindings / totalCandidates) * 1000) / 10
+      // Precision as judged by the humans using this, not by how often the
+      // agents agree with each other. The old metric (2+-agent consensus
+      // rate over every raw candidate) was structurally low and didn't
+      // actually say whether the panel was *right* about anything - two
+      // agents flagging the same non-issue would still count in its favor.
+      // This instead asks: of the findings someone has actually reviewed
+      // (Resolved or marked Not Acceptable), what share were Resolved? A
+      // finding still sitting open hasn't been judged yet, so it's excluded
+      // from both sides rather than assumed correct. Null (not 0%) until at
+      // least one finding has been reviewed - there's no verdict yet, and
+      // 0% would misreport "reviewed and all wrong" instead of "no data".
+      accuracyRate:
+        reviewedFindings > 0
+          ? Math.round((resolvedCount / reviewedFindings) * 1000) / 10
           : null,
     };
   }
@@ -101,28 +103,30 @@ export class ReviewerController {
   async getMyStats(@Request() req) {
     const userId = req.user.id;
 
-    const [activeRepoCount, reviewedPrGroups, confirmedFindings, candidateAgg] =
+    const [activeRepoCount, reviewedPrGroups, resolvedCount, dismissedCount] =
       await Promise.all([
         this.prisma.repository.count({ where: { userId, isActive: true } }),
         this.prisma.analysis.groupBy({
           by: ["repoName", "prNumber"],
           where: { userId, status: "completed" },
         }),
-        this.prisma.finding.count({ where: { analysis: { userId } } }),
-        this.prisma.analysis.aggregate({
-          where: { userId, status: "completed" },
-          _sum: { candidateFindingsCount: true },
+        this.prisma.finding.count({
+          where: { status: "resolved", analysis: { userId } },
+        }),
+        this.prisma.finding.count({
+          where: { status: "dismissed", analysis: { userId } },
         }),
       ]);
 
-    const totalCandidates = candidateAgg._sum.candidateFindingsCount || 0;
+    const reviewedFindings = resolvedCount + dismissedCount;
 
     return {
       activeRepos: activeRepoCount,
       prsReviewed: reviewedPrGroups.length,
-      consensusRate:
-        totalCandidates > 0
-          ? Math.round((confirmedFindings / totalCandidates) * 1000) / 10
+      // See PublicStats' getPublicStats for the reasoning.
+      accuracyRate:
+        reviewedFindings > 0
+          ? Math.round((resolvedCount / reviewedFindings) * 1000) / 10
           : null,
     };
   }
