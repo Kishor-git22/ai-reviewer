@@ -9,10 +9,8 @@ export interface PublicStats {
   prsReviewed: number
   // Share of reviewed findings (Resolved or marked Not Acceptable) that
   // were Resolved - precision as judged by the humans using this, not by
-  // how often the agents agreed with each other. Null means nothing has
-  // been reviewed yet - show a placeholder, not 0%. Defaulting to 0 here
-  // would misreport "reviewed and all wrong" as if a verdict already came
-  // in, when really none has.
+  // how often the agents agreed with each other. Null means "no findings
+  // reviewed yet" and must render as a placeholder, never as 0%.
   accuracyRate: number | null
 }
 
